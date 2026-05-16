@@ -1,0 +1,177 @@
+/**
+ * productService.js — Product CRUD, featured, new arrivals, categories, materials.
+ */
+
+const pool = require('../db/pool');
+const { getNextId } = require('../utils/idGenerator');
+const AppError = require('../utils/AppError');
+
+const PRODUCT_SELECT = `
+  SELECT
+    p.product_id        AS id,
+    p.product_name      AS name,
+    p.description,
+    p.base_price        AS price,
+    p.origin,
+    p.weight,
+    p.category_id       AS "categoryId",
+    c.category_name     AS "categoryName",
+    p.material_id       AS "materialId",
+    m.material          AS "materialName",
+    p.type_id           AS "typeId",
+    t.type_name         AS "typeName",
+    p.is_active         AS "isActive",
+    p.is_featured       AS "isFeatured",
+    p.stock_quantity    AS "stockQuantity",
+    COALESCE(NULLIF(p.image_url, ''), '/uploads/' || p.product_name || '.png') AS "imageUrl",
+    p.created_at        AS "createdAt",
+    p.updated_at        AS "updatedAt"
+  FROM product p
+  JOIN category c ON p.category_id = c.category_id
+  JOIN material m ON p.material_id = m.material_id
+  JOIN type     t ON p.type_id     = t.type_id
+`;
+
+const ProductService = {
+  async create(data) {
+    const { name, description = null, price, origin = null, weight = null, categoryId, materialId, typeId, stockQuantity = 0, isFeatured = false } = data;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) throw new AppError('Product name is required', 400);
+    if (price === undefined || price === null || Number(price) <= 0) throw new AppError('Price must be greater than 0', 400);
+    if (!categoryId) throw new AppError('Category ID is required', 400);
+    if (!materialId) throw new AppError('Material ID is required', 400);
+    if (!typeId) throw new AppError('Type ID is required', 400);
+
+    const productId = await getNextId(pool, 'product', 'product_id', 'P');
+
+    await pool.query(
+      'INSERT INTO product (product_id, product_name, description, base_price, origin, weight, category_id, material_id, type_id, is_active, is_featured, stock_quantity, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11, $12)',
+      [productId, name.trim(), description, Number(price), origin, weight, categoryId, materialId, typeId, isFeatured ? 1 : 0, Number(stockQuantity), `/uploads/${name.trim()}.png`]
+    );
+
+    return this.getById(productId);
+  },
+
+  async getById(productId) {
+    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.product_id = $1`, [productId]);
+    if (rows.length === 0) throw new AppError(`Product '${productId}' not found`, 404);
+    return rows[0];
+  },
+
+  async list({ page = 1, pageSize = 12, categoryId, category, materialId, isActive, search, minPrice, maxPrice } = {}) {
+    const size = Math.min(Math.max(1, Number(pageSize) || 12), 100);
+    const currentPage = Math.max(1, Number(page) || 1);
+    const offset = (currentPage - 1) * size;
+
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (categoryId) { conditions.push(`p.category_id = $${idx++}`); params.push(categoryId); }
+    else if (category) { conditions.push(`c.category_name = $${idx++}`); params.push(category); }
+    if (materialId) { conditions.push(`p.material_id = $${idx++}`); params.push(materialId); }
+    if (isActive !== undefined && isActive !== null && isActive !== '') {
+      conditions.push(`p.is_active = $${idx++}`); params.push(isActive ? 1 : 0);
+    }
+    if (search && search.trim().length > 0) {
+      const words = search.trim().split(/\s+/);
+      const wordConds = words.map(word => {
+        const term = `%${word}%`;
+        const c = `(p.product_name ILIKE $${idx++} OR p.description ILIKE $${idx++} OR m.material ILIKE $${idx++})`;
+        params.push(term, term, term);
+        return c;
+      });
+      conditions.push(`(${wordConds.join(' AND ')})`);
+    }
+    if (minPrice !== undefined && minPrice !== null && minPrice !== '') { conditions.push(`p.base_price >= $${idx++}`); params.push(Number(minPrice)); }
+    if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') { conditions.push(`p.base_price <= $${idx++}`); params.push(Number(maxPrice)); }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM product p JOIN category c ON p.category_id = c.category_id JOIN material m ON p.material_id = m.material_id JOIN type t ON p.type_id = t.type_id ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(total / size);
+
+    const dataParams = [...params, size, offset];
+    const { rows } = await pool.query(
+      `${PRODUCT_SELECT} ${whereClause} ORDER BY p.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      dataParams
+    );
+
+    return { products: rows, total, page: currentPage, pageSize: size, totalPages };
+  },
+
+  async partialUpdate(productId, updates) {
+    await this.getById(productId);
+
+    const FIELD_MAP = {
+      name: 'product_name', description: 'description', price: 'base_price',
+      origin: 'origin', weight: 'weight', categoryId: 'category_id',
+      materialId: 'material_id', typeId: 'type_id', stockQuantity: 'stock_quantity',
+      isFeatured: 'is_featured', isActive: 'is_active', imageUrl: 'image_url',
+    };
+
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+
+    for (const [key, column] of Object.entries(FIELD_MAP)) {
+      if (!(key in updates)) continue;
+      let value = updates[key];
+
+      if (key === 'name') {
+        if (!value || typeof value !== 'string' || value.trim().length === 0) throw new AppError('Product name cannot be empty', 400);
+        value = value.trim();
+        // Automatically sync image_url if name changes and image_url is not explicitly provided
+        if (!('imageUrl' in updates)) {
+          setClauses.push(`image_url = $${idx++}`);
+          params.push(`/uploads/${value}.png`);
+        }
+      }
+      if (key === 'price' && Number(value) <= 0) throw new AppError('Price must be greater than 0', 400);
+      if (key === 'stockQuantity' && Number(value) < 0) throw new AppError('Stock quantity must be 0 or greater', 400);
+      if (key === 'isFeatured' || key === 'isActive') value = value ? 1 : 0;
+      if (key === 'price' || key === 'stockQuantity') value = Number(value);
+
+      setClauses.push(`${column} = $${idx++}`);
+      params.push(value);
+    }
+
+    if (setClauses.length === 0) throw new AppError('No valid fields provided for update', 400);
+
+    params.push(productId);
+    await pool.query(`UPDATE product SET ${setClauses.join(', ')} WHERE product_id = $${idx}`, params);
+    return this.getById(productId);
+  },
+
+  async softDelete(productId) {
+    await this.getById(productId);
+    await pool.query('UPDATE product SET is_active = 0 WHERE product_id = $1', [productId]);
+    return this.getById(productId);
+  },
+
+  async getFeatured() {
+    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.is_featured = 1 AND p.is_active = 1 ORDER BY p.created_at DESC LIMIT 8`);
+    return rows;
+  },
+
+  async getNewArrivals() {
+    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.is_active = 1 AND p.created_at >= NOW() - INTERVAL '30 days' ORDER BY p.created_at DESC LIMIT 8`);
+    return rows;
+  },
+
+  async getCategories() {
+    const { rows } = await pool.query('SELECT category_id AS id, category_name AS name FROM category ORDER BY category_name ASC');
+    return rows;
+  },
+
+  async getMaterials() {
+    const { rows } = await pool.query('SELECT material_id AS id, material AS name FROM material ORDER BY material ASC');
+    return rows;
+  },
+};
+
+module.exports = { ProductService };
