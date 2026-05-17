@@ -21,8 +21,8 @@ const CartService = {
 
     const { rows: items } = await pool.query(
       `SELECT h.product_id AS "productId", p.product_name AS name, p.base_price AS "unitPrice",
-              h.quantity, (p.base_price * h.quantity) AS "lineTotal", p.stock_quantity AS "stockQuantity",
-              COALESCE(NULLIF(p.image_url, ''), '/uploads/' || p.product_name || '.png') AS "imageUrl"
+            p.quantity, (p.base_price * h.quantity) AS "lineTotal", p.quantity AS "stockQuantity",
+            COALESCE(NULLIF(p.image_url, ''), '/uploads/' || LOWER(REPLACE(p.product_name, ' ', '_')) || '.png') AS "imageUrl"
        FROM holds h JOIN product p ON h.product_id = p.product_id WHERE h.cart_id = $1`,
       [cartId]
     );
@@ -40,7 +40,7 @@ const CartService = {
 
     const cartId = await this._getOrCreateCart(customerId);
 
-    const { rows: productRows } = await pool.query('SELECT stock_quantity, is_active FROM product WHERE product_id = $1', [productId]);
+    const { rows: productRows } = await pool.query('SELECT quantity, is_active FROM product WHERE product_id = $1', [productId]);
     if (productRows.length === 0) throw new AppError('Product not found', 404);
     if (!productRows[0].is_active) throw new AppError('Product is not active', 400);
 
@@ -48,7 +48,7 @@ const CartService = {
     const currentQty = holdRows.length > 0 ? holdRows[0].quantity : 0;
     const newQty = currentQty + quantity;
 
-    if (newQty > productRows[0].stock_quantity) throw new AppError('Insufficient stock', 400);
+    if (newQty > productRows[0].quantity) throw new AppError('Insufficient stock', 400);
 
     if (holdRows.length > 0) {
       await pool.query('UPDATE holds SET quantity = $1 WHERE cart_id = $2 AND product_id = $3', [newQty, cartId, productId]);
@@ -65,9 +65,9 @@ const CartService = {
 
     const cartId = await this._getOrCreateCart(customerId);
 
-    const { rows: productRows } = await pool.query('SELECT stock_quantity FROM product WHERE product_id = $1', [productId]);
+    const { rows: productRows } = await pool.query('SELECT quantity FROM product WHERE product_id = $1', [productId]);
     if (productRows.length === 0) throw new AppError('Product not found', 404);
-    if (quantity > productRows[0].stock_quantity) throw new AppError('Insufficient stock', 400);
+    if (quantity > productRows[0].quantity) throw new AppError('Insufficient stock', 400);
 
     const { rows: holdRows } = await pool.query('SELECT quantity FROM holds WHERE cart_id = $1 AND product_id = $2', [cartId, productId]);
     if (holdRows.length === 0) throw new AppError('Item not found in cart', 404);

@@ -49,7 +49,7 @@ const AdminLogin = () => {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label" style={{ color: 'var(--text-secondary)' }}>Employee Email</label>
+            <label className="form-label" style={{ color: 'var(--text-secondary)' }}>Admin Email</label>
             <input 
               type="email" 
               className="form-input" 

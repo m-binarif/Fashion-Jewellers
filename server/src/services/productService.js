@@ -12,41 +12,48 @@ const PRODUCT_SELECT = `
     p.product_name      AS name,
     p.description,
     p.base_price        AS price,
+    p.quantity,
+    p.last_stock_update AS "lastStockUpdate",
     p.origin,
     p.weight,
+    p.image_url         AS "imageUrl",
     p.category_id       AS "categoryId",
     c.category_name     AS "categoryName",
     p.material_id       AS "materialId",
     m.material          AS "materialName",
     p.type_id           AS "typeId",
     t.type_name         AS "typeName",
-    p.is_active         AS "isActive",
-    p.is_featured       AS "isFeatured",
-    p.stock_quantity    AS "stockQuantity",
-    COALESCE(NULLIF(p.image_url, ''), '/uploads/' || p.product_name || '.png') AS "imageUrl",
+    p.supplier_id       AS "supplierId",
+    s.supplier_name     AS "supplierName",
+    (p.is_active = 1)   AS "isActive",
     p.created_at        AS "createdAt",
-    p.updated_at        AS "updatedAt"
+    (SELECT COALESCE(ROUND(AVG(r.rating)::numeric, 1), 0.0) FROM review r WHERE r.product_id = p.product_id) AS "avgRating",
+    (SELECT COUNT(*) FROM review r WHERE r.product_id = p.product_id) AS "reviewCount"
   FROM product p
   JOIN category c ON p.category_id = c.category_id
   JOIN material m ON p.material_id = m.material_id
   JOIN type     t ON p.type_id     = t.type_id
+  JOIN supplier s ON p.supplier_id = s.supplier_id
 `;
 
 const ProductService = {
   async create(data) {
-    const { name, description = null, price, origin = null, weight = null, categoryId, materialId, typeId, stockQuantity = 0, isFeatured = false } = data;
+    const { name, description = null, price, quantity = 0, origin = null, weight = null, categoryId, materialId, typeId, supplierId } = data;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) throw new AppError('Product name is required', 400);
     if (price === undefined || price === null || Number(price) <= 0) throw new AppError('Price must be greater than 0', 400);
     if (!categoryId) throw new AppError('Category ID is required', 400);
     if (!materialId) throw new AppError('Material ID is required', 400);
     if (!typeId) throw new AppError('Type ID is required', 400);
+    if (!supplierId) throw new AppError('Supplier ID is required', 400);
 
     const productId = await getNextId(pool, 'product', 'product_id', 'P');
+    const imageFilename = name.trim().toLowerCase().replace(/ /g, '_') + '.png';
+    const imageUrl = `/uploads/${imageFilename}`;
 
     await pool.query(
-      'INSERT INTO product (product_id, product_name, description, base_price, origin, weight, category_id, material_id, type_id, is_active, is_featured, stock_quantity, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, $11, $12)',
-      [productId, name.trim(), description, Number(price), origin, weight, categoryId, materialId, typeId, isFeatured ? 1 : 0, Number(stockQuantity), `/uploads/${name.trim()}.png`]
+      'INSERT INTO product (product_id, product_name, description, base_price, quantity, is_active, origin, weight, image_url, category_id, material_id, type_id, supplier_id) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11, $12)',
+      [productId, name.trim(), description, Number(price), Number(quantity), origin, weight, imageUrl, categoryId, materialId, typeId, supplierId]
     );
 
     return this.getById(productId);
@@ -110,8 +117,8 @@ const ProductService = {
     const FIELD_MAP = {
       name: 'product_name', description: 'description', price: 'base_price',
       origin: 'origin', weight: 'weight', categoryId: 'category_id',
-      materialId: 'material_id', typeId: 'type_id', stockQuantity: 'stock_quantity',
-      isFeatured: 'is_featured', isActive: 'is_active', imageUrl: 'image_url',
+      materialId: 'material_id', typeId: 'type_id', quantity: 'quantity',
+      isActive: 'is_active', imageUrl: 'image_url', supplierId: 'supplier_id'
     };
 
     const setClauses = [];
@@ -125,22 +132,27 @@ const ProductService = {
       if (key === 'name') {
         if (!value || typeof value !== 'string' || value.trim().length === 0) throw new AppError('Product name cannot be empty', 400);
         value = value.trim();
-        // Automatically sync image_url if name changes and image_url is not explicitly provided
         if (!('imageUrl' in updates)) {
+          const imageFilename = value.trim().toLowerCase().replace(/ /g, '_') + '.png';
           setClauses.push(`image_url = $${idx++}`);
-          params.push(`/uploads/${value}.png`);
+          params.push(`/uploads/${imageFilename}`);
         }
       }
       if (key === 'price' && Number(value) <= 0) throw new AppError('Price must be greater than 0', 400);
-      if (key === 'stockQuantity' && Number(value) < 0) throw new AppError('Stock quantity must be 0 or greater', 400);
-      if (key === 'isFeatured' || key === 'isActive') value = value ? 1 : 0;
-      if (key === 'price' || key === 'stockQuantity') value = Number(value);
+      if (key === 'quantity' && Number(value) < 0) throw new AppError('Quantity must be 0 or greater', 400);
+      if (key === 'isActive') value = value ? 1 : 0;
+      if (key === 'price' || key === 'quantity') value = Number(value);
 
       setClauses.push(`${column} = $${idx++}`);
       params.push(value);
     }
 
     if (setClauses.length === 0) throw new AppError('No valid fields provided for update', 400);
+
+    // Update last_stock_update if quantity changed
+    if ('quantity' in updates) {
+      setClauses.push(`last_stock_update = CURRENT_TIMESTAMP`);
+    }
 
     params.push(productId);
     await pool.query(`UPDATE product SET ${setClauses.join(', ')} WHERE product_id = $${idx}`, params);
@@ -154,7 +166,8 @@ const ProductService = {
   },
 
   async getFeatured() {
-    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.is_featured = 1 AND p.is_active = 1 ORDER BY p.created_at DESC LIMIT 8`);
+    // Since is_featured was removed, we'll return the latest 8 active products
+    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.is_active = 1 ORDER BY p.created_at DESC LIMIT 8`);
     return rows;
   },
 

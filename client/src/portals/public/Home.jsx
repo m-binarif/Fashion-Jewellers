@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../../services/api';
+import api, { getAssetUrl } from '../../services/api';
 
 const Home = () => {
   const [featuredProducts, setFeaturedProducts] = useState([]);
@@ -142,10 +142,7 @@ const Home = () => {
                 <Link to={`/products/${product.id}`} key={product.id} className="glass-card rounded-2xl overflow-hidden block group">
                   <div className="relative h-72 overflow-hidden bg-[#0d0d0d]">
                     <img 
-                      src={(() => {
-                        const imgPath = product.imageUrl || '/uploads/ring.jpg';
-                        return imgPath.startsWith('http') ? imgPath : `http://localhost:5000${imgPath}`;
-                      })()}
+                      src={getAssetUrl(product.imageUrl || '/uploads/ring.jpg')}
                       alt={product.name}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
@@ -156,7 +153,7 @@ const Home = () => {
                   <div className="p-8">
                     <p className="text-xs text-gray-500 uppercase tracking-[0.2em] mb-3">{product.categoryName}</p>
                     <h3 className="text-xl font-bold text-white mb-4 line-clamp-2" style={{ fontFamily: 'var(--font-heading)' }}>{product.name}</h3>
-                    <p className="text-[var(--accent-primary)] font-bold text-xl drop-shadow-md">PKR {Number(product.price).toLocaleString()}</p>
+                    <p className="text-[var(--accent-primary)] font-bold text-xl drop-shadow-md">Rs. {Number(product.price).toLocaleString()}</p>
                   </div>
                 </Link>
               )) : (
