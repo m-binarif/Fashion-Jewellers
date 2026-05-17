@@ -35,7 +35,7 @@ const DashboardLayout = ({ allowedRoles }) => {
   }
 
   if (!user || !allowedRoles.includes(user.role)) {
-    const lastRole = sessionStorage.getItem('last_role');
+    const lastRole = localStorage.getItem('last_role');
     if (lastRole === 'employee') {
       return <Navigate to="/employee/login" replace />;
     }
@@ -78,7 +78,7 @@ const DashboardLayout = ({ allowedRoles }) => {
               fontSize: '1rem', color: '#fff', fontWeight: 700, flexShrink: 0
             }}>💎</div>
             <div>
-              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1rem', color: 'var(--accent-primary)' }}>Luxe Jewels</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--accent-primary)', letterSpacing: '0.05em' }}>FASHION JEWELLERS</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                 {user?.role === 'employee' ? 'Employee Portal' : 'Admin Portal'}
               </div>

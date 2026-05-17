@@ -287,3 +287,53 @@ INSERT INTO review (review_id, rating, comment, review_date, customer_id, produc
 ('REV014', 5, 'Heavy Imperial Emerald suite, exactly as shown in the pictures. Love it.', '2026-04-22', 'C003', 'P010'),
 ('REV015', 3, 'The Pastel Pink earrings are nice, but the color is slightly different from the photo.', '2026-04-10', 'C009', 'P005');
 
+
+CREATE SEQUENCE IF NOT EXISTS category_id_seq START WITH 6;
+ALTER TABLE category ALTER COLUMN category_id SET DEFAULT ('CAT' || LPAD(nextval('category_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS material_id_seq START WITH 6;
+ALTER TABLE material ALTER COLUMN material_id SET DEFAULT ('MAT' || LPAD(nextval('material_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS type_id_seq START WITH 5;
+ALTER TABLE type ALTER COLUMN type_id SET DEFAULT ('TYP' || LPAD(nextval('type_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS role_id_seq START WITH 4;
+ALTER TABLE role_type ALTER COLUMN role_id SET DEFAULT ('ROL' || LPAD(nextval('role_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS method_id_seq START WITH 5;
+ALTER TABLE payment_method ALTER COLUMN method_id SET DEFAULT ('PM' || LPAD(nextval('method_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS customer_id_seq START WITH 16;
+ALTER TABLE customer ALTER COLUMN customer_id SET DEFAULT ('C' || LPAD(nextval('customer_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS supplier_id_seq START WITH 6;
+ALTER TABLE supplier ALTER COLUMN supplier_id SET DEFAULT ('SUP' || LPAD(nextval('supplier_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS employee_id_seq START WITH 5;
+ALTER TABLE employee ALTER COLUMN employee_id SET DEFAULT ('EMP' || LPAD(nextval('employee_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS product_id_seq START WITH 11;
+ALTER TABLE product ALTER COLUMN product_id SET DEFAULT ('P' || LPAD(nextval('product_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS cart_id_seq START WITH 1;
+ALTER TABLE cart ALTER COLUMN cart_id SET DEFAULT ('CRT' || LPAD(nextval('cart_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS cart_item_id_seq START WITH 1;
+ALTER TABLE holds ALTER COLUMN cart_item_id SET DEFAULT ('CI' || LPAD(nextval('cart_item_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS order_id_seq START WITH 1;
+ALTER TABLE orders ALTER COLUMN order_id SET DEFAULT ('O' || LPAD(nextval('order_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS order_detail_id_seq START WITH 1;
+ALTER TABLE record_items ADD COLUMN IF NOT EXISTS order_detail_id VARCHAR(10);
+ALTER TABLE record_items ALTER COLUMN order_detail_id SET DEFAULT ('OD' || LPAD(nextval('order_detail_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS payment_id_seq START WITH 1;
+ALTER TABLE payment ALTER COLUMN payment_id SET DEFAULT ('PAY' || LPAD(nextval('payment_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS shipment_id_seq START WITH 1;
+ALTER TABLE shipment ALTER COLUMN shipment_id SET DEFAULT ('SHP' || LPAD(nextval('shipment_id_seq')::text, 3, '0'));
+
+CREATE SEQUENCE IF NOT EXISTS review_id_seq START WITH 16;
+ALTER TABLE review ALTER COLUMN review_id SET DEFAULT ('REV' || LPAD(nextval('review_id_seq')::text, 3, '0'));
+

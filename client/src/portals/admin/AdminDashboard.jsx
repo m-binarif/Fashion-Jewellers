@@ -69,7 +69,7 @@ const AdminDashboard = () => {
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ margin: 0, fontSize: '1.6rem' }}>Dashboard Overview</h2>
         <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Welcome back — here's what's happening at Luxe Jewels.
+          Welcome back — here's what's happening at FASHION JEWELLERS.
         </p>
       </div>
 

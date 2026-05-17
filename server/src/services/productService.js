@@ -47,14 +47,14 @@ const ProductService = {
     if (!typeId) throw new AppError('Type ID is required', 400);
     if (!supplierId) throw new AppError('Supplier ID is required', 400);
 
-    const productId = await getNextId(pool, 'product', 'product_id', 'P');
     const imageFilename = name.trim().toLowerCase().replace(/ /g, '_') + '.png';
     const imageUrl = `/uploads/${imageFilename}`;
 
-    await pool.query(
-      'INSERT INTO product (product_id, product_name, description, base_price, quantity, is_active, origin, weight, image_url, category_id, material_id, type_id, supplier_id) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11, $12)',
-      [productId, name.trim(), description, Number(price), Number(quantity), origin, weight, imageUrl, categoryId, materialId, typeId, supplierId]
+    const { rows } = await pool.query(
+      'INSERT INTO product (product_name, description, base_price, quantity, is_active, origin, weight, image_url, category_id, material_id, type_id, supplier_id) VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9, $10, $11) RETURNING product_id',
+      [name.trim(), description, Number(price), Number(quantity), origin, weight, imageUrl, categoryId, materialId, typeId, supplierId]
     );
+    const productId = rows[0].product_id;
 
     return this.getById(productId);
   },
@@ -75,7 +75,15 @@ const ProductService = {
     let idx = 1;
 
     if (categoryId) { conditions.push(`p.category_id = $${idx++}`); params.push(categoryId); }
-    else if (category) { conditions.push(`c.category_name = $${idx++}`); params.push(category); }
+    else if (category) {
+      let catVal = category.trim();
+      const lower = catVal.toLowerCase();
+      if (lower === 'bracelet' || lower === 'bracelets') {
+        catVal = 'Bracelets';
+      }
+      conditions.push(`c.category_name ILIKE $${idx++}`);
+      params.push(catVal);
+    }
     if (materialId) { conditions.push(`p.material_id = $${idx++}`); params.push(materialId); }
     if (isActive !== undefined && isActive !== null && isActive !== '') {
       conditions.push(`p.is_active = $${idx++}`); params.push(isActive ? 1 : 0);
@@ -166,9 +174,19 @@ const ProductService = {
   },
 
   async getFeatured() {
-    // Since is_featured was removed, we'll return the latest 8 active products
-    const { rows } = await pool.query(`${PRODUCT_SELECT} WHERE p.is_active = 1 ORDER BY p.created_at DESC LIMIT 8`);
-    return rows;
+    const categories = ['Sets', 'Bracelets', 'Earrings', 'Rings'];
+    const products = [];
+
+    for (const catName of categories) {
+      const { rows } = await pool.query(
+        `${PRODUCT_SELECT} WHERE p.is_active = 1 AND c.category_name = $1 ORDER BY p.created_at ASC LIMIT 1`,
+        [catName]
+      );
+      if (rows.length > 0) {
+        products.push(rows[0]);
+      }
+    }
+    return products;
   },
 
   async getNewArrivals() {

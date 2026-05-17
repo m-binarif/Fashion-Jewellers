@@ -3,11 +3,11 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Link, useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import api, { getAssetUrl } from '../../services/api';
 
 const Cart = () => {
   const { cart, loading, updateQuantity, removeItem, clearCart, refreshCart } = useCart();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   
@@ -68,10 +68,11 @@ const Cart = () => {
   };
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) {
       navigate('/login');
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   if (loading) {
     return (
@@ -84,7 +85,7 @@ const Cart = () => {
   if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <div className="container mx-auto flex flex-col justify-center items-center" style={{ minHeight: '60vh', padding: '5rem 1rem' }}>
-        <div className="glass p-16 rounded-3xl shadow-2xl relative overflow-hidden w-full max-w-2xl text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(212, 175, 55, 0.2)', backdropFilter: 'blur(10px)' }}>
+        <div className="glass p-16 rounded-3xl shadow-2xl relative overflow-hidden w-full max-w-2xl text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(212, 175, 55, 0.2)', backdropFilter: 'blur(10px)', paddingTop: '5rem', paddingBottom: '5rem' }}>
           {/* Subtle gold glow at the top */}
           <div className="absolute top-0 left-0 w-full h-1 opacity-100" style={{ background: 'linear-gradient(90deg, transparent, var(--accent-primary), transparent)' }}></div>
           
@@ -122,54 +123,65 @@ const Cart = () => {
             </div>
             
             <div className="divide-y divide-gray-800 bg-black/20">
-              {cart.items.map((item) => (
-                <div key={item.productId} className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 items-center">
-                  <div className="col-span-1 md:col-span-6 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
-                    <img 
-                      src={item.product_image ? `http://localhost:5000/${item.product_image}` : '/luxury_gold_ring_1778155004637.png'} 
-                      alt={item.name}
-                      className="w-28 h-28 object-cover rounded-xl shadow-lg border border-gray-800"
-                    />
-                    <div className="flex flex-col justify-center">
-                      <Link to={`/products/${item.productId}`} className="font-bold text-lg hover:text-[var(--accent-primary)] transition-colors" style={{ fontFamily: 'var(--font-heading)' }}>
-                        {item.name}
-                      </Link>
-                      <button 
-                        onClick={() => removeItem(item.productId)}
-                        className="mt-3 text-red-400 hover:text-red-500 text-sm font-medium flex items-center justify-center sm:justify-start gap-1 transition-all"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        Remove Item
-                      </button>
+              {cart?.items?.map((item, index) => {
+                if (!item) return null;
+                const productId = item.productId;
+                const name = item.name || 'Unnamed Product';
+                const imageUrl = item.imageUrl || '';
+                const unitPrice = Number(item.unitPrice || 0);
+                const quantity = Number(item.quantity || 0);
+                const lineTotal = Number(item.lineTotal || 0);
+                const isRing = index === 3;
+                
+                return (
+                  <div key={productId || index} className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 items-center">
+                    <div className="col-span-1 md:col-span-6 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
+                      <img 
+                        src={getAssetUrl(imageUrl || `/uploads/${name.toLowerCase().replace(/ /g, '_')}.png`)} 
+                        alt={name}
+                        className="w-28 h-28 object-cover rounded-xl shadow-lg border border-gray-800"
+                      />
+                      <div className="flex flex-col justify-center">
+                        <Link to={`/products/${productId}`} className="font-bold text-lg hover:text-[var(--accent-primary)] transition-colors" style={{ fontFamily: 'var(--font-heading)' }}>
+                          {name}
+                        </Link>
+                        <button 
+                          onClick={() => removeItem(productId)}
+                          className="mt-3 text-red-400 hover:text-red-500 text-sm font-medium flex items-center justify-center sm:justify-start gap-1 transition-all"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                          Remove Item
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="col-span-1 md:col-span-2 text-center font-medium text-gray-400">
+                      Rs. {unitPrice.toLocaleString()}
+                    </div>
+                    
+                    <div className="col-span-1 md:col-span-2 flex justify-center">
+                      <div className="flex items-center border border-gray-700 rounded-full overflow-hidden bg-black/50">
+                        <button 
+                          className="px-4 py-2 hover:bg-gray-800 transition-colors text-white font-bold"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                          onClick={() => updateQuantity(productId, Math.max(1, quantity - 1))}
+                        >-</button>
+                        <span className="w-10 text-center font-bold text-white">{quantity}</span>
+                        <button 
+                          className="px-4 py-2 hover:bg-gray-800 transition-colors text-white font-bold"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                          onClick={() => updateQuantity(productId, quantity + 1)}
+                        >+</button>
+                      </div>
+                    </div>
+                    
+                    <div className="col-span-1 md:col-span-2 text-center md:text-right font-bold text-xl text-[var(--accent-primary)]">
+                      Rs. {lineTotal.toLocaleString()}
                     </div>
                   </div>
-                  
-                  <div className="col-span-1 md:col-span-2 text-center font-medium text-gray-400">
-                    Rs. {item.unitPrice.toLocaleString()}
-                  </div>
-                  
-                  <div className="col-span-1 md:col-span-2 flex justify-center">
-                    <div className="flex items-center border border-gray-700 rounded-full overflow-hidden bg-black/50">
-                      <button 
-                        className="px-4 py-2 hover:bg-gray-800 transition-colors text-white font-bold"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                        onClick={() => updateQuantity(item.productId, Math.max(1, item.quantity - 1))}
-                      >-</button>
-                      <span className="w-10 text-center font-bold text-white">{item.quantity}</span>
-                      <button 
-                        className="px-4 py-2 hover:bg-gray-800 transition-colors text-white font-bold"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                      >+</button>
-                    </div>
-                  </div>
-                  
-                  <div className="col-span-1 md:col-span-2 text-center md:text-right font-bold text-xl text-[var(--accent-primary)]">
-                    Rs. {Number(item.lineTotal).toLocaleString()}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           
@@ -185,14 +197,14 @@ const Cart = () => {
             </button>
           </div>
         </div>
-
+ 
         <div className="w-full lg:w-96 shrink-0">
           <div className="glass p-8 rounded-2xl shadow-xl sticky top-24 border border-gray-800 bg-black/40">
             <h3 className="text-2xl font-bold mb-8 text-white uppercase tracking-widest" style={{ fontFamily: 'var(--font-heading)' }}>Order Summary</h3>
             
             <div className="flex justify-between mb-4 text-gray-300">
               <span>Subtotal</span>
-              <span className="font-medium text-white">Rs. {cart.items.reduce((acc, item) => acc + Number(item.lineTotal), 0).toLocaleString()}</span>
+              <span className="font-medium text-white">Rs. {cart?.items?.reduce((acc, item) => acc + Number(item?.lineTotal || 0), 0)?.toLocaleString() || '0'}</span>
             </div>
             <div className="flex justify-between mb-8 text-gray-400 text-sm">
               <span>Shipping</span>
@@ -202,7 +214,7 @@ const Cart = () => {
             <div className="border-t border-gray-700 pt-6 mb-8 flex justify-between items-end">
               <span className="font-bold text-lg text-white">Total</span>
               <span className="text-3xl font-bold" style={{ color: 'var(--accent-primary)' }}>
-                Rs. {cart.items.reduce((acc, item) => acc + Number(item.lineTotal), 0).toLocaleString()}
+                Rs. {cart?.items?.reduce((acc, item) => acc + Number(item?.lineTotal || 0), 0)?.toLocaleString() || '0'}
               </span>
             </div>
             

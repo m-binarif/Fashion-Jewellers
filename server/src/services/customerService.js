@@ -20,12 +20,12 @@ const CustomerService = {
     if (existing.length > 0) throw new AppError('Email already in use', 409);
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const customerId = await getNextId(pool, 'customer', 'customer_id', 'C');
 
-    await pool.query(
-      'INSERT INTO customer (customer_id, full_name, email, country, phone_number, address, password_hash, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, 1)',
-      [customerId, fullName, email, country || 'Unknown', phone, address || '', passwordHash]
+    const { rows } = await pool.query(
+      'INSERT INTO customer (full_name, email, country, phone_number, address, password_hash, is_active) VALUES ($1, $2, $3, $4, $5, $6, 1) RETURNING customer_id',
+      [fullName, email, country || 'Unknown', phone, address || '', passwordHash]
     );
+    const customerId = rows[0].customer_id;
 
     const user = { id: customerId, role: 'customer', name: fullName };
     const token = jwt.sign({ sub: user.id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });

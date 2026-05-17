@@ -48,15 +48,15 @@ const EmployeeService = {
     const { rows: existingUsername } = await pool.query('SELECT employee_id FROM employee WHERE username = $1', [username]);
     if (existingUsername.length > 0) throw new AppError('Username already in use', 409);
 
-    const employeeId = await getNextId(pool, 'employee', 'employee_id', 'EMP');
     const passwordHash = await bcrypt.hash(password, 12);
     const resolvedHireDate = hireDate || new Date().toISOString().split('T')[0];
 
-    await pool.query(
-      `INSERT INTO employee (employee_id, emp_name, email, phone_number, hire_date, cnic, username, password, increment, role_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)`,
-      [employeeId, name.trim(), email.trim(), phone.trim(), resolvedHireDate, cnic.trim(), username.trim(), passwordHash, Number(increment), roleId]
+    const { rows } = await pool.query(
+      `INSERT INTO employee (emp_name, email, phone_number, hire_date, cnic, username, password, increment, role_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1) RETURNING employee_id`,
+      [name.trim(), email.trim(), phone.trim(), resolvedHireDate, cnic.trim(), username.trim(), passwordHash, Number(increment), roleId]
     );
+    const employeeId = rows[0].employee_id;
 
     return { id: employeeId, name, email, phone, roleId };
   },

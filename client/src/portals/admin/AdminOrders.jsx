@@ -157,7 +157,7 @@ const AdminOrders = () => {
                             onClick={(e) => {
                               e.stopPropagation();
                               const oid = order.id || order.order_id;
-                              const token = sessionStorage.getItem('admin_token');
+                              const token = localStorage.getItem('admin_token');
                               const url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/orders/${oid}/invoice?token=${token}`;
                               window.open(url, '_blank');
                             }}

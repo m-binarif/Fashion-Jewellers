@@ -11,9 +11,8 @@ const CartService = {
     const { rows } = await pool.query('SELECT cart_id FROM cart WHERE customer_id = $1', [customerId]);
     if (rows.length > 0) return rows[0].cart_id;
 
-    const cartId = await getNextId(pool, 'cart', 'cart_id', 'CRT');
-    await pool.query('INSERT INTO cart (cart_id, customer_id) VALUES ($1, $2)', [cartId, customerId]);
-    return cartId;
+    const { rows: cartRows } = await pool.query('INSERT INTO cart (customer_id) VALUES ($1) RETURNING cart_id', [customerId]);
+    return cartRows[0].cart_id;
   },
 
   async getCart(customerId) {
@@ -21,7 +20,7 @@ const CartService = {
 
     const { rows: items } = await pool.query(
       `SELECT h.product_id AS "productId", p.product_name AS name, p.base_price AS "unitPrice",
-            p.quantity, (p.base_price * h.quantity) AS "lineTotal", p.quantity AS "stockQuantity",
+            h.quantity AS quantity, (p.base_price * h.quantity) AS "lineTotal", p.quantity AS "stockQuantity",
             COALESCE(NULLIF(p.image_url, ''), '/uploads/' || LOWER(REPLACE(p.product_name, ' ', '_')) || '.png') AS "imageUrl"
        FROM holds h JOIN product p ON h.product_id = p.product_id WHERE h.cart_id = $1`,
       [cartId]
@@ -53,8 +52,7 @@ const CartService = {
     if (holdRows.length > 0) {
       await pool.query('UPDATE holds SET quantity = $1 WHERE cart_id = $2 AND product_id = $3', [newQty, cartId, productId]);
     } else {
-      const cartItemId = await getNextId(pool, 'holds', 'cart_item_id', 'CI');
-      await pool.query('INSERT INTO holds (cart_id, product_id, cart_item_id, quantity) VALUES ($1, $2, $3, $4)', [cartId, productId, cartItemId, newQty]);
+      await pool.query('INSERT INTO holds (cart_id, product_id, quantity) VALUES ($1, $2, $3)', [cartId, productId, newQty]);
     }
 
     return this.getCart(customerId);

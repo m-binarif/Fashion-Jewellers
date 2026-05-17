@@ -4,13 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!user) {
       navigate('/login');
       return;
@@ -37,7 +39,15 @@ const Profile = () => {
     };
 
     fetchData();
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <div className="loader" style={{ width: '50px', height: '50px', borderWidth: '3px', borderTopColor: 'var(--accent-primary)' }}></div>
+      </div>
+    );
+  }
 
   if (!user) return null;
 
@@ -53,7 +63,7 @@ const Profile = () => {
   const displayName = profile?.name || user.name || 'User';
 
   return (
-    <div className="container py-12 max-w-5xl">
+    <div className="container py-12 max-w-5xl" style={{ marginTop: '2rem' }}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Column: Profile Card */}
@@ -69,15 +79,25 @@ const Profile = () => {
             <p className="text-gray-500 mb-6">{profile?.email || user.email}</p>
 
             {profile && (
-              <div className="text-left bg-white/5 p-4 rounded-xl mb-8 border border-white/10">
-                <div className="mb-3">
-                  <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Phone</span>
-                  <p className="text-gray-300 text-sm mt-1">{profile.phone || 'Not provided'}</p>
+              <div 
+                className="text-left bg-white/5 p-5 rounded-xl border border-white/10 shadow-sm"
+                style={{ 
+                  marginTop: '1.5rem', 
+                  marginBottom: '1.5rem', 
+                  maxWidth: '280px', 
+                  marginLeft: 'auto', 
+                  marginRight: 'auto', 
+                  width: '100%' 
+                }}
+              >
+                <div className="mb-4">
+                  <span className="text-xs text-gray-500 uppercase font-bold tracking-wider" style={{ letterSpacing: '0.05em' }}>Phone</span>
+                  <p className="text-gray-300 text-sm mt-1 font-medium">{profile.phone || 'Not provided'}</p>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Address</span>
-                  <p className="text-gray-300 text-sm mt-1">{profile.address || 'Not provided'}</p>
-                  <p className="text-gray-300 text-sm">{profile.country}</p>
+                  <span className="text-xs text-gray-500 uppercase font-bold tracking-wider" style={{ letterSpacing: '0.05em' }}>Address</span>
+                  <p className="text-gray-300 text-sm mt-1 font-medium">{profile.address || 'Not provided'}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{profile.country}</p>
                 </div>
               </div>
             )}
@@ -92,7 +112,7 @@ const Profile = () => {
         </div>
 
         {/* Right Column: Order History */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 lg:pl-8 mt-8 lg:mt-0" style={{ paddingTop: '2.5rem', paddingBottom: '2.5rem' }}>
           <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-[var(--text-primary)]" style={{ fontFamily: 'var(--font-heading)' }}>
             <span className="text-xl">📦</span> My Orders
           </h2>
@@ -102,10 +122,32 @@ const Profile = () => {
               <div className="loader"></div>
             </div>
           ) : orders.length === 0 ? (
-            <div className="glass p-12 rounded-2xl shadow-sm text-center text-gray-500">
+            <div 
+              className="glass p-12 rounded-2xl shadow-sm text-center text-gray-500"
+              style={{ paddingTop: '5rem', paddingBottom: '5rem' }}
+            >
               <div className="text-4xl mb-4">🛍️</div>
               <p>You haven't placed any orders yet.</p>
-              <button onClick={() => navigate('/products')} className="mt-4 text-[var(--accent-primary)] hover:underline font-medium">
+              <button 
+                onClick={() => navigate('/products')} 
+                style={{
+                  background: 'linear-gradient(135deg, var(--accent-primary) 0%, #b8860b 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1.5rem',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  transition: 'opacity 0.2s',
+                  marginTop: '1.5rem',
+                  display: 'inline-block'
+                }}
+                onMouseOver={(e) => e.target.style.opacity = 0.9}
+                onMouseOut={(e) => e.target.style.opacity = 1}
+              >
                 Start Shopping &rarr;
               </button>
             </div>
@@ -132,7 +174,7 @@ const Profile = () => {
                   <div className="flex flex-wrap justify-between items-center pt-4 border-t border-gray-100 gap-4">
                     <button 
                       onClick={() => {
-                        const token = sessionStorage.getItem(user.role === 'admin' || user.role === 'employee' ? 'admin_token' : 'token');
+                        const token = localStorage.getItem(user.role === 'admin' || user.role === 'employee' ? 'admin_token' : 'token');
                         const url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/orders/${order.id}/invoice?token=${token}`;
                         window.open(url, '_blank');
                       }}

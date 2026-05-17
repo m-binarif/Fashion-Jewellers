@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
     const loadUser = async () => {
       const isAdminPortal = window.location.pathname.startsWith('/admin');
       const tokenKey = isAdminPortal ? 'admin_token' : 'token';
-      const token = sessionStorage.getItem(tokenKey);
+      const token = localStorage.getItem(tokenKey);
       if (!token) {
         setLoading(false);
         return;
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
         
         const payload = JSON.parse(payloadStr);
         
-        sessionStorage.setItem('last_role', payload.role);
+        localStorage.setItem('last_role', payload.role);
 
         // Basic user object from token
         setUser({
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
       } catch (err) {
         console.error('Failed to parse token', err);
         const isAdminPortal = window.location.pathname.startsWith('/admin');
-        sessionStorage.removeItem(isAdminPortal ? 'admin_token' : 'token');
+        localStorage.removeItem(isAdminPortal ? 'admin_token' : 'token');
       } finally {
         setLoading(false);
       }
@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         const { token } = response.data.data;
         const tokenKey = (type === 'admin' || type === 'employee') ? 'admin_token' : 'token';
-        sessionStorage.setItem(tokenKey, token);
+        localStorage.setItem(tokenKey, token);
         
         let base64Url = token.split('.')[1];
         let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -105,7 +105,7 @@ export const AuthProvider = ({ children }) => {
           return { success: false, message: 'Invalid credentials for employee portal' };
         }
 
-        sessionStorage.setItem('last_role', payload.role);
+        localStorage.setItem('last_role', payload.role);
         
         setUser({
           id: payload.sub,
@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     const isAdminPortal = window.location.pathname.startsWith('/admin');
     const tokenKey = isAdminPortal ? 'admin_token' : 'token';
-    sessionStorage.removeItem(tokenKey);
+    localStorage.removeItem(tokenKey);
     setUser(null);
   };
 

@@ -31,6 +31,8 @@ app.use('/api/v1/orders', require('./routes/orders'));
 app.use('/api/v1/admin/orders', require('./routes/adminOrders'));
 app.use('/api/v1/admin/payments', require('./routes/payments'));
 app.use('/api/v1/admin/stats', require('./routes/adminStats'));
+app.use('/api/v1/reviews', require('./routes/reviews'));
+app.use('/api/reviews', require('./routes/reviews'));
 
 // Global error handler
 app.use((err, req, res, next) => {

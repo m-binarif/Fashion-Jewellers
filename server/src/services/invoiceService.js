@@ -47,7 +47,7 @@ const InvoiceService = {
     </style></head><body>
       <button class="print-btn" onclick="window.print()">Print Invoice</button>
       <div class="header">
-        <div class="company-details"><h1>Luxe Jewels</h1><p>123 Diamond Street<br>New York, NY 10001<br>contact@jewellery.com</p></div>
+        <div class="company-details"><h1>FASHION JEWELLERS</h1><p>123 Diamond Street<br>New York, NY 10001<br>contact@jewellery.com</p></div>
         <div class="invoice-details"><h2>INVOICE</h2><p><strong>Order #:</strong> ${order.orderNumber}<br><strong>Date:</strong> ${new Date(order.orderDate).toLocaleDateString()}<br><strong>Status:</strong> ${order.status}</p></div>
       </div>
       <div class="bill-to"><strong>Bill To:</strong><br>${customerName}<br>${order.shipping.street}<br>${order.shipping.city}, ${order.shipping.state} ${order.shipping.postalCode}<br>${order.shipping.country}</div>

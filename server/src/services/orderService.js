@@ -20,8 +20,6 @@ const OrderService = {
       const { rows: methodRows } = await client.query('SELECT method_id FROM payment_method WHERE method_id = $1', [paymentMethodId]);
       if (methodRows.length === 0) throw new AppError('Invalid payment method', 400);
 
-      const orderId = await getNextId(client, 'orders', 'order_id', 'O');
-
       // Generate order number
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const { rows: lastOrder } = await client.query(
@@ -35,26 +33,25 @@ const OrderService = {
       const { street, city, state, postalCode, country } = shippingInfo;
       if (!street || !city || !state || !postalCode || !country) throw new AppError('Incomplete shipping information', 400);
 
-      await client.query(
-        `INSERT INTO orders (order_id, order_number, total_amount, order_status, customer_id, shipping_street, shipping_city, shipping_state, shipping_postal_code, shipping_country, order_date, status_updated_at)
-         VALUES ($1, $2, $3, 'Pending', $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
-        [orderId, orderNumber, cart.subtotal, customerId, street, city, state, postalCode, country]
+      const { rows: orderRows } = await client.query(
+        `INSERT INTO orders (order_number, total_amount, order_status, customer_id, shipping_street, shipping_city, shipping_state, shipping_postal_code, shipping_country, order_date, status_updated_at)
+         VALUES ($1, $2, 'Pending', $3, $4, $5, $6, $7, $8, NOW(), NOW()) RETURNING order_id`,
+        [orderNumber, cart.subtotal, customerId, street, city, state, postalCode, country]
       );
+      const orderId = orderRows[0].order_id;
 
       for (const item of cart.items) {
         const result = await client.query('UPDATE product SET quantity = quantity - $1 WHERE product_id = $2 AND quantity >= $1', [item.quantity, item.productId]);
         if (result.rowCount === 0) throw new AppError(`Insufficient stock for product ${item.name}`, 409);
 
-        const orderDetailId = await getNextId(client, 'record_items', 'order_detail_id', 'OD');
-        await client.query('INSERT INTO record_items (order_id, product_id, order_detail_id, quantity, unit_price) VALUES ($1, $2, $3, $4, $5)', [orderId, item.productId, orderDetailId, item.quantity, item.unitPrice]);
+        await client.query('INSERT INTO record_items (order_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4)', [orderId, item.productId, item.quantity, item.unitPrice]);
       }
 
       await client.query('DELETE FROM holds WHERE cart_id = $1', [cart.cartId]);
 
-      const paymentId = await getNextId(client, 'payment', 'payment_id', 'PAY');
       await client.query(
-        'INSERT INTO payment (payment_id, amount_paid, payment_status, order_id, method_id) VALUES ($1, $2, $3, $4, $5)',
-        [paymentId, cart.subtotal, 'Pending', orderId, paymentMethodId]
+        'INSERT INTO payment (amount_paid, payment_status, order_id, method_id) VALUES ($1, $2, $3, $4)',
+        [cart.subtotal, 'Pending', orderId, paymentMethodId]
       );
 
       await client.query('COMMIT');

@@ -17,8 +17,12 @@ const Products = () => {
 
   // Update local category state when URL changes
   useEffect(() => {
-    const catParam = searchParams.get('category');
+    let catParam = searchParams.get('category');
     if (catParam !== null) {
+      const lower = catParam.trim().toLowerCase();
+      if (lower === 'bracelet' || lower === 'bracelets') {
+        catParam = 'Bracelets';
+      }
       setCategory(catParam);
     }
   }, [searchParams]);
@@ -42,7 +46,15 @@ const Products = () => {
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
-      if (category) params.append('category', category);
+      
+      let catQuery = category;
+      if (catQuery) {
+        const lower = catQuery.trim().toLowerCase();
+        if (lower === 'bracelet' || lower === 'bracelets') {
+          catQuery = 'Bracelets';
+        }
+      }
+      if (catQuery) params.append('category', catQuery);
       if (minPrice) params.append('minPrice', minPrice);
       if (maxPrice) params.append('maxPrice', maxPrice);
       params.append('isActive', 'true'); // Hide soft-deleted products
@@ -184,7 +196,7 @@ const Products = () => {
                     {category}
                   </h3>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
                   {products.filter(p => p.categoryName === category).map(product => (
                     <ProductCard key={product.id} product={product} />
                   ))}
@@ -217,7 +229,7 @@ const Products = () => {
                         </button>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
                       {displayedItems.map(product => (
                         <ProductCard key={product.id} product={product} />
                       ))}

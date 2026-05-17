@@ -22,7 +22,7 @@ api.interceptors.request.use(
   (config) => {
     const isAdminPortal = window.location.pathname.startsWith('/admin');
     const tokenKey = isAdminPortal ? 'admin_token' : 'token';
-    const token = sessionStorage.getItem(tokenKey);
+    const token = localStorage.getItem(tokenKey);
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -43,7 +43,7 @@ api.interceptors.response.use(
       const isAdminPortal = window.location.pathname.startsWith('/admin');
       const tokenKey = isAdminPortal ? 'admin_token' : 'token';
       // Clear token
-      sessionStorage.removeItem(tokenKey);
+      localStorage.removeItem(tokenKey);
       // Dispatch a custom event to tell the app to log out (AuthContext listens to this)
       window.dispatchEvent(new Event('auth:unauthorized'));
     }

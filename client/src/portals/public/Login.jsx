@@ -31,7 +31,7 @@ const Login = () => {
       <div className="glass p-8" style={{ width: '100%', maxWidth: '450px', borderRadius: '4px' }}>
         <h2 className="text-center mb-2" style={{ color: 'var(--accent-primary)' }}>Welcome Back</h2>
         <p className="text-center mb-8" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Sign in to your Luxe Jewels account
+          Sign in to your FASHION JEWELLERS account
         </p>
 
         {error && (

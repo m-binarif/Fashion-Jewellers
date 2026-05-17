@@ -9,8 +9,8 @@ const Navbar = () => {
   return (
     <nav className="glass" style={{ position: 'sticky', top: 0, zIndex: 50 }}>
       <div className="container flex justify-between items-center py-4">
-        <Link to="/" style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', fontWeight: '700', color: 'var(--accent-primary)' }}>
-          LUXE JEWELS
+        <Link to="/" style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', fontWeight: '700', color: 'var(--accent-primary)', letterSpacing: '0.05em' }}>
+          FASHION JEWELLERS
         </Link>
         <ul className="flex gap-8 items-center">
           <li><Link to="/">Home</Link></li>
