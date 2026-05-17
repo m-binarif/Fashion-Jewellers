@@ -42,9 +42,7 @@ const OrderService = {
       );
 
       for (const item of cart.items) {
-        await client.query('UPDATE inventory SET product_quantity = product_quantity - $1, last_stock_update = CURRENT_DATE WHERE product_id = $2 AND product_quantity >= $1', [item.quantity, item.productId]);
-
-        const result = await client.query('UPDATE product SET stock_quantity = stock_quantity - $1 WHERE product_id = $2 AND stock_quantity >= $1', [item.quantity, item.productId]);
+        const result = await client.query('UPDATE product SET quantity = quantity - $1 WHERE product_id = $2 AND quantity >= $1', [item.quantity, item.productId]);
         if (result.rowCount === 0) throw new AppError(`Insufficient stock for product ${item.name}`, 409);
 
         const orderDetailId = await getNextId(client, 'record_items', 'order_detail_id', 'OD');

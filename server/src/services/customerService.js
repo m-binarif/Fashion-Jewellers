@@ -35,7 +35,7 @@ const CustomerService = {
   async getProfile(customerId) {
     const { rows } = await pool.query(
       `SELECT customer_id AS id, full_name AS name, email, country, phone_number AS phone, address,
-              is_active AS "isActive", created_at AS "createdAt",
+              (is_active = 1) AS "isActive", created_at AS "createdAt",
               (SELECT COUNT(*) FROM orders WHERE customer_id = customer.customer_id) AS "orderCount",
               (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE customer_id = customer.customer_id AND order_status NOT IN ('Cancelled', 'Payment Failed')) AS "totalSpent"
        FROM customer WHERE customer_id = $1`,
@@ -106,7 +106,7 @@ const CustomerService = {
     const totalPages = Math.ceil(total / size);
 
     const { rows } = await pool.query(
-      `SELECT customer_id AS id, full_name AS name, email, phone_number AS phone, is_active AS "isActive", created_at AS "createdAt",
+      `SELECT customer_id AS id, full_name AS name, email, phone_number AS phone, (is_active = 1) AS "isActive", created_at AS "createdAt",
               (SELECT COUNT(*) FROM orders WHERE customer_id = customer.customer_id) AS "orderCount",
               (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE customer_id = customer.customer_id AND order_status NOT IN ('Cancelled', 'Payment Failed')) AS "totalSpent"
        FROM customer ${whereClause} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,

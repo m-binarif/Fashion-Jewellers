@@ -35,10 +35,6 @@ async function findUserByEmail(email) {
   );
   if (e.rows.length > 0) return { ...e.rows[0], role: 'employee' };
 
-  // Supplier
-  const s = await pool.query('SELECT supplier_id AS id, supplier_name AS name, password_hash AS "passwordHash", is_active AS "isActive" FROM supplier WHERE email = $1', [email]);
-  if (s.rows.length > 0) return { ...s.rows[0], role: 'supplier' };
-
   return null;
 }
 

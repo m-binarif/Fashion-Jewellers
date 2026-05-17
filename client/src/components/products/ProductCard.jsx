@@ -1,13 +1,11 @@
 import { Link } from 'react-router-dom';
+import { getAssetUrl } from '../../services/api';
 
 const ProductCard = ({ product }) => {
-  // Use product.imageUrl from API, fallback to ring.jpg placeholder
-  const imgPath = product.imageUrl || '/uploads/ring.jpg';
-  const imageUrl = imgPath.startsWith('http') ? imgPath : `http://localhost:5000${imgPath}`;
+  const imageUrl = getAssetUrl(product.imageUrl || '/uploads/ring.jpg');
   
-  // Deterministic random rating/reviews for visual effect to match design
-  const rating = 4 + (product.id.charCodeAt(product.id.length-1) % 2) * 0.5;
-  const reviewCount = (product.id.charCodeAt(0) % 50) + 1;
+  const rating = product.avgRating ? Number(product.avgRating) : 0;
+  const reviewCount = product.reviewCount ? Number(product.reviewCount) : 0;
 
   return (
     <Link to={`/products/${product.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column' }} className="product-card-premium">

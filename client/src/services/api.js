@@ -1,12 +1,21 @@
 import axios from 'axios';
 
 // Create an Axios instance
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const ASSET_BASE = API_BASE.replace('/api/v1', '');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1',
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json'
   }
 });
+
+export const getAssetUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  return `${ASSET_BASE}${path}`;
+};
 
 // Request interceptor to attach JWT token
 api.interceptors.request.use(

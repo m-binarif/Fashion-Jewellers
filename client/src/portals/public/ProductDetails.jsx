@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../../services/api';
+import api, { getAssetUrl } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 
 const ProductDetails = () => {
@@ -13,12 +13,20 @@ const ProductDetails = () => {
   const { addToCart } = useCart();
   const [activeTab, setActiveTab] = useState('description');
 
+  const [reviews, setReviews] = useState([]);
+
   useEffect(() => {
-    const fetchProduct = async () => {
+    const fetchProductAndReviews = async () => {
       try {
-        const res = await api.get(`/products/${id}`);
-        if (res.data.success) {
-          setProduct(res.data.data);
+        const [prodRes, revRes] = await Promise.all([
+          api.get(`/products/${id}`),
+          api.get(`/products/${id}/reviews`)
+        ]);
+        if (prodRes.data.success) {
+          setProduct(prodRes.data.data);
+        }
+        if (revRes.data.success) {
+          setReviews(revRes.data.data);
         }
       } catch (err) {
         setError('Failed to load product details.');
@@ -26,7 +34,7 @@ const ProductDetails = () => {
         setLoading(false);
       }
     };
-    fetchProduct();
+    fetchProductAndReviews();
   }, [id]);
 
   if (loading) {
@@ -46,11 +54,10 @@ const ProductDetails = () => {
     );
   }
 
-  const imgPath = product.imageUrl || '/uploads/ring.jpg';
-  const imageUrl = imgPath.startsWith('http') ? imgPath : `http://localhost:5000${imgPath}`;
-  const inStock = product.stockQuantity > 0;
-  const rating = 4 + (product.id.charCodeAt(product.id.length-1) % 2) * 0.5;
-  const reviewCount = (product.id.charCodeAt(0) % 50) + 1;
+  const imageUrl = getAssetUrl(product.imageUrl || '/uploads/ring.jpg');
+  const inStock = product.quantity > 0;
+  const rating = product.avgRating ? Number(product.avgRating) : 0;
+  const reviewCount = product.reviewCount ? Number(product.reviewCount) : 0;
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '4rem 2rem' }}>
@@ -129,7 +136,7 @@ const ProductDetails = () => {
                       style={{ background: 'transparent', border: 'none', color: 'white', width: '50px', textAlign: 'center', fontSize: '1rem' }}
                     />
                     <button 
-                      onClick={() => setQuantity(Math.min(product.stockQuantity, quantity + 1))}
+                      onClick={() => setQuantity(Math.min(product.quantity, quantity + 1))}
                       style={{ background: 'transparent', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '0.8rem 1.2rem', cursor: 'pointer', fontSize: '1.2rem', transition: 'background 0.2s' }}
                       onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.05)'}
                       onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
@@ -175,7 +182,7 @@ const ProductDetails = () => {
           {/* Details Accordion Tabs */}
           <div>
             <div style={{ display: 'flex', gap: '2rem', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              {['description', 'details', 'shipping'].map(tab => (
+              {['description', 'details', 'shipping', 'reviews'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -207,7 +214,7 @@ const ProductDetails = () => {
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                   <li><strong style={{ color: 'white' }}>Category:</strong> {product.categoryName}</li>
                   <li><strong style={{ color: 'white' }}>Material:</strong> {product.materialName}</li>
-                  <li><strong style={{ color: 'white' }}>Weight:</strong> {product.weight ? `${product.weight}g` : 'N/A'}</li>
+                  <li><strong style={{ color: 'white' }}>Weight:</strong> {product.weight || 'N/A'}</li>
                   <li><strong style={{ color: 'white' }}>Origin:</strong> {product.origin || 'N/A'}</li>
                 </ul>
               )}
@@ -215,6 +222,24 @@ const ProductDetails = () => {
                 <div>
                   <p style={{ marginBottom: '1rem' }}>We offer complimentary insured express shipping on all orders. Your luxury piece will arrive in secure, unmarked packaging to ensure complete privacy and safety during transit.</p>
                   <p>Enjoy a 30-day complimentary return policy on all unworn items returned in their original condition.</p>
+                </div>
+              )}
+              {activeTab === 'reviews' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {reviews.length > 0 ? reviews.map(rev => (
+                    <div key={rev.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '1.2rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <strong style={{ color: 'white' }}>{rev.customerName}</strong>
+                        <span style={{ color: '#d4af37', fontSize: '0.8rem', letterSpacing: '1px' }}>
+                          {'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{rev.comment}</p>
+                      <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{new Date(rev.reviewDate).toLocaleDateString()}</small>
+                    </div>
+                  )) : (
+                    <p>No reviews yet for this piece.</p>
+                  )}
                 </div>
               )}
             </div>

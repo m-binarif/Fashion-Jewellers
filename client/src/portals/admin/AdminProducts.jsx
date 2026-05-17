@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import api, { getAssetUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 
 const AdminProducts = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [materials, setMaterials] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const { showSuccess, showError } = useToast();
 
@@ -14,23 +15,25 @@ const AdminProducts = () => {
   const [modalMode, setModalMode] = useState('add');
   const [selectedImage, setSelectedImage] = useState(null);
   const [formData, setFormData] = useState({
-    name: '', description: '', price: 0, stockQuantity: 0,
-    categoryId: '', materialId: '', typeId: 'TYP001', origin: '', weight: ''
+    name: '', description: '', price: 0, quantity: 0,
+    categoryId: '', materialId: '', typeId: 'TYP001', origin: '', weight: '', supplierId: ''
   });
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [prodRes, catRes, matRes] = await Promise.all([
+      const [prodRes, catRes, matRes, supRes] = await Promise.all([
         api.get('/products?pageSize=100'),
         api.get('/categories'),
-        api.get('/materials')
+        api.get('/materials'),
+        api.get('/admin/suppliers')
       ]);
       if (prodRes.data.success) {
         setProducts(prodRes.data.data.products || prodRes.data.data || []);
       }
       if (catRes.data.success) setCategories(catRes.data.data || []);
       if (matRes.data.success) setMaterials(matRes.data.data || []);
+      if (supRes.data.success) setSuppliers(supRes.data.data || []);
     } catch (err) {
       console.error('Failed to load data', err);
     } finally {
@@ -45,10 +48,11 @@ const AdminProducts = () => {
   const openAddModal = () => {
     setModalMode('add');
     setFormData({
-      name: '', description: '', price: 0, stockQuantity: 0,
+      name: '', description: '', price: 0, quantity: 0,
       categoryId: categories.length > 0 ? categories[0].id : '', 
       materialId: materials.length > 0 ? materials[0].id : '', 
-      typeId: 'TYP001', origin: '', weight: ''
+      typeId: 'TYP001', origin: '', weight: '',
+      supplierId: suppliers.length > 0 ? suppliers[0].id : ''
     });
     setSelectedImage(null);
     setIsModalOpen(true);
@@ -61,12 +65,13 @@ const AdminProducts = () => {
       name: product.name,
       description: product.description || '',
       price: product.price || 0,
-      stockQuantity: product.stockQuantity || 0,
+      quantity: product.quantity || 0,
       categoryId: product.categoryId || (categories.length > 0 ? categories[0].id : ''),
       materialId: product.materialId || (materials.length > 0 ? materials[0].id : ''),
       typeId: product.typeId || 'TYP001',
       origin: product.origin || '',
-      weight: product.weight || ''
+      weight: product.weight || '',
+      supplierId: product.supplierId || (suppliers.length > 0 ? suppliers[0].id : '')
     });
     setSelectedImage(null);
     setIsModalOpen(true);
@@ -98,58 +103,23 @@ const AdminProducts = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Ensure numeric fields are numbers
       const payload = {
         ...formData,
         price: Number(formData.price),
-        stockQuantity: Number(formData.stockQuantity)
+        quantity: Number(formData.quantity)
       };
 
       if (modalMode === 'add') {
         const res = await api.post('/products', payload);
         if (res.data.success) {
           const newProduct = res.data.data;
-          
-          if (selectedImage) {
-            try {
-              const imgData = new FormData();
-              imgData.append('image', selectedImage);
-              await api.post(`/products/${newProduct.id}/images`, imgData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-              });
-              // Fetch updated product with image
-              const updatedRes = await api.get(`/products/${newProduct.id}`);
-              setProducts([updatedRes.data.data, ...products]);
-            } catch (imgErr) {
-              console.error(imgErr);
-              showError('Product added, but image upload failed.');
-              setProducts([newProduct, ...products]);
-            }
-          } else {
-            setProducts([newProduct, ...products]);
-          }
+          setProducts([newProduct, ...products]);
           showSuccess('Product added successfully!');
         }
       } else {
         const res = await api.patch(`/products/${formData.id}`, payload);
         if (res.data.success) {
-          let updatedProduct = res.data.data;
-          
-          if (selectedImage) {
-            try {
-              const imgData = new FormData();
-              imgData.append('image', selectedImage);
-              await api.post(`/products/${formData.id}/images`, imgData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-              });
-              const updatedRes = await api.get(`/products/${formData.id}`);
-              updatedProduct = updatedRes.data.data;
-            } catch (imgErr) {
-              console.error(imgErr);
-              showError('Product updated, but image upload failed.');
-            }
-          }
-          
+          const updatedProduct = res.data.data;
           setProducts(products.map(p => p.id === formData.id ? updatedProduct : p));
           showSuccess('Product updated successfully!');
         }
@@ -179,7 +149,8 @@ const AdminProducts = () => {
                 <th className="p-4">ID</th>
                 <th className="p-4">Product Name</th>
                 <th className="p-4">Price</th>
-                <th className="p-4">Stock</th>
+                <th className="p-4">Quantity</th>
+                <th className="p-4">Supplier</th>
                 <th className="p-4">Status</th>
                 <th className="p-4">Actions</th>
               </tr>
@@ -188,13 +159,19 @@ const AdminProducts = () => {
               {products.map(product => (
                 <tr key={product.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <td className="p-4">{product.id}</td>
-                  <td className="p-4 font-semibold">{product.name}</td>
-                  <td className="p-4">${Number(product.price).toLocaleString()}</td>
                   <td className="p-4">
-                    <span style={{ color: product.stockQuantity > 0 ? 'var(--success-color)' : 'var(--error-color)' }}>
-                      {product.stockQuantity}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <img src={getAssetUrl(product.imageUrl)} alt={product.name} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+                      <span className="font-semibold">{product.name}</span>
+                    </div>
+                  </td>
+                  <td className="p-4">Rs. {Number(product.price).toLocaleString()}</td>
+                  <td className="p-4">
+                    <span style={{ color: product.quantity > 0 ? 'var(--success-color)' : 'var(--error-color)' }}>
+                      {product.quantity}
                     </span>
                   </td>
+                  <td className="p-4 text-sm text-text-secondary">{product.supplierName || '—'}</td>
                   <td className="p-4">
                     <span style={{ 
                       padding: '0.25rem 0.5rem', 
@@ -231,7 +208,7 @@ const AdminProducts = () => {
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', 
           alignItems: 'center', zIndex: 1000
         }}>
-          <div className="card" style={{ width: '500px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="card" style={{ width: '600px', padding: '2rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ marginTop: 0, marginBottom: '1.5rem' }}>{modalMode === 'add' ? 'Add New Product' : 'Edit Product'}</h3>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
@@ -244,12 +221,12 @@ const AdminProducts = () => {
               </div>
               <div style={{ display: 'flex', gap: '1rem' }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Price ($) *</label>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Price (Rs.) *</label>
                   <input required type="number" min="0" step="0.01" className="form-input" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} style={{ width: '100%' }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Stock Quantity *</label>
-                  <input required type="number" min="0" className="form-input" value={formData.stockQuantity} onChange={e => setFormData({...formData, stockQuantity: e.target.value})} style={{ width: '100%' }} />
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Quantity *</label>
+                  <input required type="number" min="0" className="form-input" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} style={{ width: '100%' }} />
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '1rem' }}>
@@ -268,9 +245,11 @@ const AdminProducts = () => {
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Product Image</label>
-                  <input type="file" accept="image/*" className="form-input" onChange={e => setSelectedImage(e.target.files[0])} style={{ width: '100%', padding: '0.4rem' }} />
-                  {selectedImage && <div style={{ fontSize: '0.8rem', color: 'var(--success-color)', marginTop: '0.2rem' }}>Selected: {selectedImage.name}</div>}
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Supplier *</label>
+                  <select required className="form-input" value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})} style={{ width: '100%' }}>
+                    <option value="">Select Supplier</option>
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </div>
               </div>
               
@@ -278,19 +257,29 @@ const AdminProducts = () => {
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Type</label>
                   <select className="form-input" value={formData.typeId} onChange={e => setFormData({...formData, typeId: e.target.value})} style={{ width: '100%' }}>
-                    <option value="TYP001">Bridal</option>
-                    <option value="TYP002">Casual</option>
-                    <option value="TYP003">Formal</option>
+                    <option value="TYP001">Wedding</option>
+                    <option value="TYP002">Party</option>
+                    <option value="TYP003">Casual</option>
+                    <option value="TYP004">Luxury</option>
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Origin (e.g. Italy, India)</label>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Origin</label>
                   <input type="text" className="form-input" value={formData.origin} onChange={e => setFormData({...formData, origin: e.target.value})} style={{ width: '100%' }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Weight (e.g. 5g)</label>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Weight</label>
                   <input type="text" className="form-input" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} style={{ width: '100%' }} />
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Product Image</label>
+                <input type="file" accept="image/*" className="form-input" onChange={e => setSelectedImage(e.target.files[0])} style={{ width: '100%', padding: '0.4rem' }} />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  Image will be automatically mapped to: <code>/uploads/&#123;product_name&#125;.png</code>
+                </p>
+                {selectedImage && <div style={{ fontSize: '0.8rem', color: 'var(--success-color)', marginTop: '0.2rem' }}>File selected: {selectedImage.name}</div>}
               </div>
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
