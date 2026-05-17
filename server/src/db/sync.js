@@ -35,28 +35,37 @@ async function runWithRetry() {
   }
 
   try {
-    const dropQueries = `
-      DROP TABLE IF EXISTS review CASCADE;
-      DROP TABLE IF EXISTS shipment CASCADE;
-      DROP TABLE IF EXISTS payment CASCADE;
-      DROP TABLE IF EXISTS record_items CASCADE;
-      DROP TABLE IF EXISTS orders CASCADE;
-      DROP TABLE IF EXISTS holds CASCADE;
-      DROP TABLE IF EXISTS cart CASCADE;
-      DROP TABLE IF EXISTS product CASCADE;
-      DROP TABLE IF EXISTS employee CASCADE;
-      DROP TABLE IF EXISTS supplier CASCADE;
-      DROP TABLE IF EXISTS customer CASCADE;
-      DROP TABLE IF EXISTS payment_method CASCADE;
-      DROP TABLE IF EXISTS role_type CASCADE;
-      DROP TABLE IF EXISTS type CASCADE;
-      DROP TABLE IF EXISTS material CASCADE;
-      DROP TABLE IF EXISTS category CASCADE;
+    console.log('Fetching all existing tables in the public schema for a clean wipe...');
+    const tableQuery = `
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `;
+    const { rows: tableRows } = await client.query(tableQuery);
 
-    console.log('Force dropping existing tables (CASCADE)...');
-    await client.query(dropQueries);
-    console.log('All existing tables dropped successfully.');
+    if (tableRows.length > 0) {
+      const tablesToDrop = tableRows.map(row => `"${row.table_name}"`).join(', ');
+      console.log(`Force dropping all existing tables: ${tablesToDrop}...`);
+      await client.query(`DROP TABLE IF EXISTS ${tablesToDrop} CASCADE;`);
+      console.log('All existing tables dropped successfully.');
+    } else {
+      console.log('No existing tables found to drop.');
+    }
+
+    // Also dynamic drop views to be absolutely thorough
+    const viewQuery = `
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_type = 'VIEW'
+    `;
+    const { rows: viewRows } = await client.query(viewQuery);
+    if (viewRows.length > 0) {
+      const viewsToDrop = viewRows.map(row => `"${row.table_name}"`).join(', ');
+      console.log(`Force dropping all existing views: ${viewsToDrop}...`);
+      await client.query(`DROP VIEW IF EXISTS ${viewsToDrop} CASCADE;`);
+      console.log('All existing views dropped successfully.');
+    }
+
 
     const sqlPath = path.join(__dirname, '..', '..', '..', 'db', 'setup_postgres.sql');
     console.log(`Reading SQL script from: ${sqlPath}`);

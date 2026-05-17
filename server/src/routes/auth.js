@@ -1,31 +1,48 @@
-/**
- * auth.js — POST /login, POST /logout, POST /register
- */
-
 const express = require('express');
 const { AuthService } = require('../services/authService');
 const { authMiddleware } = require('../middleware/auth');
-const catchAsync = require('../utils/catchAsync');
 
 const router = express.Router();
 
-router.post('/login', catchAsync(async (req, res, next) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ success: false, data: null, message: 'Email and password are required' });
-  const result = await AuthService.login(email, password);
-  res.json({ success: true, data: result, message: 'Login successful' });
-}));
+// POST /api/v1/auth/login
+// Unified user login endpoint for customers, employees, and admins
+router.post('/login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, data: null, message: 'Email and password are required' });
+    }
+    const result = await AuthService.login(email, password);
+    res.json({ success: true, data: result, message: 'Login successful' });
+  } catch (err) {
+    next(err); // Let global middleware send back the correct error message and status code
+  }
+});
 
-router.post('/logout', authMiddleware, catchAsync(async (req, res, next) => {
-  await AuthService.logout();
-  res.json({ success: true, data: null, message: 'Logged out successfully' });
-}));
+// POST /api/v1/auth/logout
+// Safe logout endpoint
+router.post('/logout', authMiddleware, async (req, res, next) => {
+  try {
+    await AuthService.logout();
+    res.json({ success: true, data: null, message: 'Logged out successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
 
-router.post('/register', catchAsync(async (req, res, next) => {
-  const { email, password, fullName, phone, country, address } = req.body;
-  if (!email || !password || !fullName || !phone) return res.status(400).json({ success: false, data: null, message: 'Email, password, fullName, and phone are required' });
-  const result = await AuthService.register({ email, password, fullName, phone, country, address });
-  res.status(201).json({ success: true, data: result, message: 'Registration successful' });
-}));
+// POST /api/v1/auth/register
+// Customer account self-registration
+router.post('/register', async (req, res, next) => {
+  try {
+    const { email, password, fullName, phone, country, address } = req.body;
+    if (!email || !password || !fullName || !phone) {
+      return res.status(400).json({ success: false, data: null, message: 'Email, password, fullName, and phone are required' });
+    }
+    const result = await AuthService.register({ email, password, fullName, phone, country, address });
+    res.status(201).json({ success: true, data: result, message: 'Registration successful' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;
