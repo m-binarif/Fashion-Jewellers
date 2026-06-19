@@ -99,23 +99,3 @@ npm run dev
 ```
 *Your browser will launch the portal at `http://localhost:5173` immediately.*
 
----
-
-## 📸 Screenshots & Demo
-
-*(Optional placeholders to show off our premium glassmorphic interface)*
-
-| Homepage Hero | Product Catalogue |
-| :---: | :---: |
-| ![Homepage Placeholder](https://via.placeholder.com/600x350/111111/D4AF37?text=Fashion+Jewellers+Hero) | ![Catalogue Placeholder](https://via.placeholder.com/600x350/111111/D4AF37?text=Product+Catalogue) |
-
----
-
-## 👥 Author & Contributions
-
-Created with passion for high-end design and solid relational database architecture.
-
-*   **GitHub:** [@m-binarif](https://github.com/m-binarif)
-*   **LinkedIn:** [Your Name](https://www.linkedin.com/in/your-profile-placeholder)
-
-Feel free to open an issue or submit a pull request if you want to contribute to this luxury shopping platform!
