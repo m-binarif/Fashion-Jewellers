@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "test": "node test/cloudinary_integration.test.js",
     "migrate:images": "node src/scripts/migrateImagesToCloudinary.js"
   },
   "dependencies": {

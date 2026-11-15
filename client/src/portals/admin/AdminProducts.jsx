@@ -77,7 +77,8 @@ const AdminProducts = () => {
       typeId: product.typeId || 'TYP001',
       origin: product.origin || '',
       weight: product.weight || '',
-      supplierId: product.supplierId || (suppliers.length > 0 ? suppliers[0].id : '')
+      supplierId: product.supplierId || (suppliers.length > 0 ? suppliers[0].id : ''),
+      imageUrl: product.imageUrl || ''
     });
     setSelectedImage(null);
     setIsModalOpen(true);
