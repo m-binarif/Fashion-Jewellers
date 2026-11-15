@@ -5,14 +5,17 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "migrate:images": "node src/scripts/migrateImagesToCloudinary.js"
   },
   "dependencies": {
     "bcrypt": "6.0.0",
+    "cloudinary": "^2.11.0",
     "cors": "2.8.6",
     "dotenv": "17.4.2",
     "express": "5.2.1",
     "jsonwebtoken": "9.0.3",
+    "multer": "^2.5.0",
     "pg": "^8.20.0"
   },
   "devDependencies": {

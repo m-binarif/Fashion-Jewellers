@@ -90,10 +90,12 @@ CREATE TABLE product (
     base_price        DECIMAL(10,2) NOT NULL,
     quantity          INT           NOT NULL DEFAULT 0,
     is_active         SMALLINT      NOT NULL DEFAULT 1,
+    post_status       VARCHAR(50)   NOT NULL DEFAULT 'pending',
     last_stock_update TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     origin            VARCHAR(50),
     weight            VARCHAR(20),
     image_url         TEXT,
+    public_image_id   VARCHAR(255),
     category_id       VARCHAR(10)   NOT NULL,
     material_id       VARCHAR(10)   NOT NULL,
     type_id           VARCHAR(10)   NOT NULL,
@@ -226,7 +228,7 @@ INSERT INTO type (type_id, type_name) VALUES
   ('TYP001','Wedding'),('TYP002','Party'),('TYP003','Casual'),('TYP004','Luxury');
 
 INSERT INTO role_type (role_id, role_name, basic_salary) VALUES
-  ('ROL001','Store Manager',80000),('ROL002','Sales Executive',60000),('ROL003','Warehouse Manager',40000);
+  ('ROL001','Inventory Manager',90000),('ROL002','Sales Executive',60000),('ROL003','Social Media Manager',90000);
 
 INSERT INTO employee (employee_id,emp_name,email,phone_number,hire_date,cnic,username,password,increment,role_id,is_active) VALUES
   ('EMP001','Mohsin Raza','mohsin@jewellery.com','923218999514','2023-01-01','3520112345671','ahmad','$2b$12$ArJwVJYWmQsFUOYHzgqdmOyanWoyDy5.hj.fvg34SEzwC44F8nQnS',5000,'ROL001',1),
@@ -336,4 +338,30 @@ ALTER TABLE shipment ALTER COLUMN shipment_id SET DEFAULT ('SHP' || LPAD(nextval
 
 CREATE SEQUENCE IF NOT EXISTS review_id_seq START WITH 16;
 ALTER TABLE review ALTER COLUMN review_id SET DEFAULT ('REV' || LPAD(nextval('review_id_seq')::text, 3, '0'));
+
+CREATE TABLE IF NOT EXISTS post_approval (
+    approval_id            VARCHAR(30)  NOT NULL,
+    product_id             VARCHAR(10)  NOT NULL,
+    employee_id            VARCHAR(10),
+    workflow_execution_id  VARCHAR(100),
+    resume_url             TEXT,
+    generated_caption      TEXT,
+    generated_image_url    TEXT,
+    platform               VARCHAR(50)  NOT NULL DEFAULT 'Instagram',
+    approval_status        VARCHAR(30)  NOT NULL DEFAULT 'Pending',
+    posting_status         VARCHAR(30)  NOT NULL DEFAULT 'Awaiting Approval',
+    instagram_post_id      VARCHAR(100),
+    error_message          TEXT,
+    decision_token         VARCHAR(100) UNIQUE,
+    decided_at             TIMESTAMP,
+    created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (approval_id),
+    CONSTRAINT fk_approval_product  FOREIGN KEY (product_id)  REFERENCES product (product_id)  ON DELETE CASCADE,
+    CONSTRAINT fk_approval_employee FOREIGN KEY (employee_id) REFERENCES employee (employee_id) ON DELETE SET NULL
+);
+
+CREATE SEQUENCE IF NOT EXISTS post_approval_id_seq START WITH 1;
+ALTER TABLE post_approval ALTER COLUMN approval_id SET DEFAULT ('APV' || LPAD(nextval('post_approval_id_seq')::text, 4, '0'));
+
 

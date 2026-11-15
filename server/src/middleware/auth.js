@@ -38,7 +38,13 @@ async function authMiddleware(req, res, next) {
     }
   }
 
-  req.user = { id: decoded.sub, role: decoded.role };
+  req.user = {
+    id: decoded.sub,
+    role: decoded.role,
+    roleName: decoded.roleName || null,
+    username: decoded.username || null,
+    name: decoded.name || null,
+  };
   next();
 }
 
@@ -51,4 +57,29 @@ function roleMiddleware(...allowedRoles) {
   };
 }
 
-module.exports = { authMiddleware, roleMiddleware };
+/**
+ * employeeRoleMiddleware — Checks specific employee role names (e.g. 'Social Media Manager', 'Inventory Manager').
+ * System Admin always has full access.
+ */
+function employeeRoleMiddleware(...allowedRoleNames) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, data: null, message: 'Unauthorized' });
+    }
+    // Admin is always authorized
+    if (req.user.role === 'admin') return next();
+
+    // Check specific employee role
+    if (req.user.role === 'employee' && req.user.roleName && allowedRoleNames.includes(req.user.roleName)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      data: null,
+      message: 'Forbidden: You do not have permission to perform this action',
+    });
+  };
+}
+
+module.exports = { authMiddleware, roleMiddleware, employeeRoleMiddleware };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { useRealtimeSync } from '../../services/realtime';
 
 const InfoRow = ({ label, val }) => (
   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.55rem 0', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
@@ -39,6 +40,11 @@ const AdminSuppliers = () => {
   }, []);
 
   useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
+
+  // Real-time synchronization: Auto-refresh when any employee adds or modifies suppliers
+  useRealtimeSync('suppliers:changed', useCallback(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]));
 
   const handleSelectSupplier = (supplier) => {
     if (selectedSupplier?.id === supplier.id) {

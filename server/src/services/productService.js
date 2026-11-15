@@ -6,6 +6,8 @@ const pool = require('../db/pool');
 const { getNextId } = require('../utils/idGenerator');
 const AppError = require('../utils/AppError');
 
+const { deleteFromCloudinary } = require('../utils/cloudinary');
+
 const PRODUCT_SELECT = `
   SELECT
     p.product_id        AS id,
@@ -17,6 +19,7 @@ const PRODUCT_SELECT = `
     p.origin,
     p.weight,
     p.image_url         AS "imageUrl",
+    p.public_image_id   AS "publicImageId",
     p.category_id       AS "categoryId",
     c.category_name     AS "categoryName",
     p.material_id       AS "materialId",
@@ -38,7 +41,20 @@ const PRODUCT_SELECT = `
 
 const ProductService = {
   async create(data) {
-    const { name, description = null, price, quantity = 0, origin = null, weight = null, categoryId, materialId, typeId, supplierId } = data;
+    const {
+      name,
+      description = null,
+      price,
+      quantity = 0,
+      origin = null,
+      weight = null,
+      categoryId,
+      materialId,
+      typeId,
+      supplierId,
+      imageUrl = null,
+      publicImageId = null
+    } = data;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) throw new AppError('Product name is required', 400);
     if (price === undefined || price === null || Number(price) <= 0) throw new AppError('Price must be greater than 0', 400);
@@ -47,12 +63,27 @@ const ProductService = {
     if (!typeId) throw new AppError('Type ID is required', 400);
     if (!supplierId) throw new AppError('Supplier ID is required', 400);
 
-    const imageFilename = name.trim().toLowerCase().replace(/ /g, '_') + '.png';
-    const imageUrl = `/uploads/${imageFilename}`;
-
     const { rows } = await pool.query(
-      'INSERT INTO product (product_name, description, base_price, quantity, is_active, origin, weight, image_url, category_id, material_id, type_id, supplier_id) VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9, $10, $11) RETURNING product_id',
-      [name.trim(), description, Number(price), Number(quantity), origin, weight, imageUrl, categoryId, materialId, typeId, supplierId]
+      `INSERT INTO product (
+        product_name, description, base_price, quantity, is_active,
+        origin, weight, image_url, public_image_id, category_id,
+        material_id, type_id, supplier_id
+      ) VALUES ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING product_id`,
+      [
+        name.trim(),
+        description,
+        Number(price),
+        Number(quantity),
+        origin,
+        weight,
+        imageUrl,
+        publicImageId,
+        categoryId,
+        materialId,
+        typeId,
+        supplierId
+      ]
     );
     const productId = rows[0].product_id;
 
@@ -126,7 +157,8 @@ const ProductService = {
       name: 'product_name', description: 'description', price: 'base_price',
       origin: 'origin', weight: 'weight', categoryId: 'category_id',
       materialId: 'material_id', typeId: 'type_id', quantity: 'quantity',
-      isActive: 'is_active', imageUrl: 'image_url', supplierId: 'supplier_id'
+      isActive: 'is_active', imageUrl: 'image_url', publicImageId: 'public_image_id',
+      supplierId: 'supplier_id'
     };
 
     const setClauses = [];
@@ -140,11 +172,6 @@ const ProductService = {
       if (key === 'name') {
         if (!value || typeof value !== 'string' || value.trim().length === 0) throw new AppError('Product name cannot be empty', 400);
         value = value.trim();
-        if (!('imageUrl' in updates)) {
-          const imageFilename = value.trim().toLowerCase().replace(/ /g, '_') + '.png';
-          setClauses.push(`image_url = $${idx++}`);
-          params.push(`/uploads/${imageFilename}`);
-        }
       }
       if (key === 'price' && Number(value) <= 0) throw new AppError('Price must be greater than 0', 400);
       if (key === 'quantity' && Number(value) < 0) throw new AppError('Quantity must be 0 or greater', 400);
@@ -202,6 +229,25 @@ const ProductService = {
   async getMaterials() {
     const { rows } = await pool.query('SELECT material_id AS id, material AS name FROM material ORDER BY material ASC');
     return rows;
+  },
+
+  async deleteAssetIfUnreferenced(publicImageId, excludeProductId = null) {
+    if (!publicImageId) return;
+    try {
+      const query = excludeProductId
+        ? 'SELECT COUNT(*) AS count FROM product WHERE public_image_id = $1 AND product_id != $2'
+        : 'SELECT COUNT(*) AS count FROM product WHERE public_image_id = $1';
+      const params = excludeProductId ? [publicImageId, excludeProductId] : [publicImageId];
+      const { rows } = await pool.query(query, params);
+      const count = parseInt(rows[0]?.count || 0, 10);
+      if (count === 0) {
+        await deleteFromCloudinary(publicImageId);
+      } else {
+        console.log(`[Cloudinary] Asset '${publicImageId}' is referenced by ${count} other product(s); preserving asset.`);
+      }
+    } catch (err) {
+      console.error(`[Cloudinary] Failed to safely delete asset '${publicImageId}':`, err.message);
+    }
   },
 };
 

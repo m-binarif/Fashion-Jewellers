@@ -11,17 +11,47 @@ const NAV_ITEMS = [
   { path: '/admin/employees', label: 'Employees',         icon: '💼' },
 ];
 
+// Defines which nav items each employee role can access
+const ROLE_NAV_ACCESS = {
+  'Inventory Manager': ['/admin/products', '/admin/suppliers'],
+  'Sales Executive':   ['/admin/orders'],
+};
+
+function getNavItemsForUser(user) {
+  // Admin sees everything
+  if (user?.role === 'admin') return NAV_ITEMS;
+
+  // Employee with a specific role name — show only permitted items
+  const roleName = user?.roleName;
+  const allowedPaths = ROLE_NAV_ACCESS[roleName];
+
+  if (allowedPaths) {
+    return NAV_ITEMS.filter(item => allowedPaths.includes(item.path));
+  }
+
+  // Employees with roles not in ROLE_NAV_ACCESS (e.g. Social Media Manager)
+  // keep existing behavior: show Products, Orders, Suppliers (hide Dashboard, Customers, Employees)
+  return NAV_ITEMS.filter(item =>
+    item.path !== '/admin/customers' &&
+    item.path !== '/admin/employees' &&
+    item.path !== '/admin'
+  );
+}
+
 const DashboardLayout = ({ allowedRoles }) => {
   const { user, loading, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Compute nav items for this user
+  const visibleNavItems = getNavItemsForUser(user);
 
   useEffect(() => {
     document.body.classList.add('theme-dashboard');
     return () => { document.body.classList.remove('theme-dashboard'); };
   }, []);
 
-  const currentNav = NAV_ITEMS.find(item =>
+  const currentNav = visibleNavItems.find(item =>
     item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
   );
   const pageTitle = currentNav?.label || (user?.role === 'employee' ? 'Employee Portal' : 'Admin Portal');
@@ -43,7 +73,19 @@ const DashboardLayout = ({ allowedRoles }) => {
   }
 
   if (user?.role === 'employee' && location.pathname === '/admin') {
-    return <Navigate to="/admin/products" replace />;
+    const firstAllowed = visibleNavItems[0]?.path || '/admin/products';
+    return <Navigate to={firstAllowed} replace />;
+  }
+
+  // Route-level access control: block employees from accessing pages not in their nav
+  if (user?.role === 'employee') {
+    const isAllowed = visibleNavItems.some(item =>
+      item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
+    );
+    if (!isAllowed) {
+      const firstAllowed = visibleNavItems[0]?.path || '/admin/products';
+      return <Navigate to={firstAllowed} replace />;
+    }
   }
 
   return (
@@ -91,12 +133,7 @@ const DashboardLayout = ({ allowedRoles }) => {
           <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-secondary)', padding: '0 0.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>
             Navigation
           </div>
-          {NAV_ITEMS.filter(item => {
-            if (user?.role === 'employee' && (item.path === '/admin/customers' || item.path === '/admin/employees' || item.path === '/admin')) {
-              return false;
-            }
-            return true;
-          }).map(item => {
+          {visibleNavItems.map(item => {
             const isActive = item.exact
               ? location.pathname === item.path
               : location.pathname.startsWith(item.path);
@@ -144,7 +181,7 @@ const DashboardLayout = ({ allowedRoles }) => {
               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.name}
               </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', textTransform: 'capitalize' }}>{user.role}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', textTransform: 'capitalize' }}>{user.roleName || user.role}</div>
             </div>
           </div>
           <button

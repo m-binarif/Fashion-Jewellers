@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useEmployeeAuth } from '../../context/EmployeeAuthContext';
 
 const EmployeeLogin = () => {
   const [email, setEmail] = useState('');
@@ -8,7 +8,7 @@ const EmployeeLogin = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login } = useEmployeeAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,12 +23,13 @@ const EmployeeLogin = () => {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password, 'employee');
+    const result = await login(email, password);
     
-    if (result.success) {
-      navigate('/admin/products'); 
+    if (result.success && result.username) {
+      // Redirect dynamically to this employee's unique dashboard route
+      navigate(`/employee/${result.username}/dashboard`); 
     } else {
-      setError(result.message);
+      setError(result.message || 'Login failed');
       setIsLoading(false);
     }
   };
@@ -51,7 +52,7 @@ const EmployeeLogin = () => {
           <div className="form-group">
             <label className="form-label" style={{ color: 'var(--text-secondary)' }}>Employee Email</label>
             <input 
-              type="email" 
+              type="text" 
               className="form-input" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}

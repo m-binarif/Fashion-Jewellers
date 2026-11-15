@@ -30,7 +30,10 @@ async function findUserByEmail(email) {
 
   // Employee
   const e = await pool.query(
-    'SELECT e.employee_id AS id, e.emp_name AS name, e.password AS "passwordHash", e.is_active AS "isActive" FROM employee e WHERE e.email = $1',
+    `SELECT e.employee_id AS id, e.emp_name AS name, e.username, e.password AS "passwordHash", e.is_active AS "isActive", r.role_name AS "roleName"
+     FROM employee e
+     JOIN role_type r ON e.role_id = r.role_id
+     WHERE e.email = $1 OR e.username = $1`,
     [email]
   );
   if (e.rows.length > 0) return { ...e.rows[0], role: 'employee' };
@@ -47,8 +50,24 @@ const AuthService = {
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) throw new AppError('Invalid email or password', 401);
 
-    const token = jwt.sign({ sub: user.id, role: user.role, name: user.name }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    return { token, user: { id: user.id, role: user.role, name: user.name } };
+    const tokenPayload = {
+      sub: user.id,
+      role: user.role,
+      name: user.name,
+      username: user.username || null,
+    };
+    if (user.roleName) tokenPayload.roleName = user.roleName;
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    return {
+      token,
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        username: user.username || null,
+        roleName: user.roleName || null
+      }
+    };
   },
 
   async logout() {

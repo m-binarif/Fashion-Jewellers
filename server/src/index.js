@@ -33,6 +33,8 @@ app.use('/api/v1/admin/payments', require('./routes/payments'));
 app.use('/api/v1/admin/stats', require('./routes/adminStats'));
 app.use('/api/v1/reviews', require('./routes/reviews'));
 app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/v1/sync', require('./routes/sync'));
+app.use('/api/v1/social', require('./routes/social'));
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -41,13 +43,16 @@ app.use((err, req, res, next) => {
   res.status(status).json({ success: false, data: null, message: err.message || 'Internal server error' });
 });
 
-
+const { initSocialTable } = require('./db/initSocialTable');
+const { initProductSchema } = require('./db/initProductSchema');
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   try {
     const result = await pool.query('SELECT NOW() AS now');
     console.log(`PostgreSQL connected — DB time: ${result.rows[0]?.now}`);
+    await initSocialTable();
+    await initProductSchema();
   } catch (err) {
     console.error('PostgreSQL connection FAILED:', err.message);
   }
