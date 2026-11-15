@@ -2,20 +2,16 @@
  * social.js — Social Media Manager API Routes.
  * Implements local n8n webhook integration for automated Instagram publishing.
  *
- * Uses the simplified Post Approval table with ONLY 9 essential columns:
- * 1. approval_request_id (VARCHAR(50), PRIMARY KEY)
- * 2. product_id (VARCHAR(10), REFERENCES product)
- * 3. generated_caption (TEXT)
- * 4. enhanced_image_url (TEXT)
- * 5. approval_status (VARCHAR(30))
- * 6. posting_status (VARCHAR(30))
- * 7. created_at (TIMESTAMP)
- * 8. updated_at (TIMESTAMP)
- * 9. published_at (TIMESTAMP)
+ * ARCHITECTURAL RULE:
+ * - The backend is responsible ONLY for authentication, authorization, read operations,
+ *   eligibility validation, and triggering the n8n webhook with { "product_id": productId }.
+ * - The backend NEVER performs INSERT, UPDATE, or DELETE on post_approval.
+ * - The backend NEVER updates product.post_status for Instagram posting.
+ * - n8n is the SOLE system responsible for creating and updating post_approval records,
+ *   and updating product.post_status to 'published' after successful Instagram publishing.
  */
 
 const express = require('express');
-const crypto = require('crypto');
 const pool = require('../db/pool');
 const { authMiddleware, employeeRoleMiddleware } = require('../middleware/auth');
 const { broadcast } = require('../utils/eventHub');
@@ -24,6 +20,11 @@ const router = express.Router();
 
 const N8N_INSTAGRAM_WEBHOOK_URL = process.env.N8N_INSTAGRAM_WEBHOOK_URL || 'http://localhost:5678/webhook/social-media-product-post';
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || 'YOUR_LONG_RANDOM_SECRET';
+
+/**
+ * Standard status normalizer: trims and converts to lowercase.
+ */
+const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
 
 /**
  * Middleware to verify x-api-key header for incoming n8n webhook calls
@@ -54,15 +55,15 @@ router.get('/products', authMiddleware, employeeRoleMiddleware('Social Media Man
         p.base_price AS price,
         p.quantity,
         (p.is_active = 1) AS "isActive",
-        p.post_status AS "post_status",
+        LOWER(TRIM(p.post_status)) AS "post_status",
         p.image_url AS "imageUrl",
         p.public_image_id AS "publicImageId",
         p.created_at AS "createdAt",
         c.category_name AS "categoryName",
         m.material AS "materialName",
         latest.approval_request_id AS "latestApprovalRequestId",
-        latest.approval_status AS "latestApprovalStatus",
-        latest.posting_status AS "latestPostingStatus",
+        LOWER(TRIM(latest.approval_status)) AS "latestApprovalStatus",
+        LOWER(TRIM(latest.posting_status)) AS "latestPostingStatus",
         latest.created_at AS "latestApprovalCreatedAt",
         latest.published_at AS "latestPublishedAt"
       FROM product p
@@ -89,6 +90,7 @@ router.get('/products', authMiddleware, employeeRoleMiddleware('Social Media Man
 // 2. POST /api/social-media/products/:productId/post
 //    (also supports POST /products/:productId/post and legacy POST /trigger-post)
 // Initiates the posting workflow by dispatching ONLY product_id to local n8n.
+// The backend NEVER writes to post_approval or updates product.post_status here.
 // -----------------------------------------------------------------------------
 const handlePostTrigger = async (req, res, next) => {
   const client = await pool.connect();
@@ -98,12 +100,12 @@ const handlePostTrigger = async (req, res, next) => {
       return res.status(400).json({ success: false, data: null, message: 'productId is required' });
     }
 
-    // Atomic transaction for concurrency safety
+    // Atomic transaction for concurrency safety and eligibility validation
     await client.query('BEGIN');
 
     // 1. Lock and verify the product record
     const prodRes = await client.query(
-      `SELECT product_id, product_name, post_status
+      `SELECT product_id, product_name, post_status, image_url
        FROM product
        WHERE product_id = $1
        FOR UPDATE`,
@@ -116,15 +118,25 @@ const handlePostTrigger = async (req, res, next) => {
     }
 
     const product = prodRes.rows[0];
-    const postStatus = (product.post_status || '').toLowerCase().trim();
+    const postStatus = normalizeStatus(product.post_status);
 
-    // 2. Business Rule: post_status must be 'Pending' (never 'Published')
+    // 2. Business Rule: product has a valid original image URL
+    if (!product.image_url || !product.image_url.trim()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        data: null,
+        message: 'Product does not have a valid original image URL to post.',
+      });
+    }
+
+    // 3. Business Rule: post_status must be 'pending' (never 'published')
     if (postStatus === 'published') {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
         data: null,
-        message: `Product is already Published and cannot be re-posted.`,
+        message: 'Product is already published and cannot be re-posted.',
       });
     }
 
@@ -133,11 +145,11 @@ const handlePostTrigger = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         data: null,
-        message: `Only products with 'Pending' post status can be posted. Current status: '${product.post_status}'.`,
+        message: `Only products with 'pending' post status can be posted. Current status: '${product.post_status}'.`,
       });
     }
 
-    // 3. Business Rule: Check latest approval attempt for this product
+    // 4. Business Rule: Check latest approval attempt for this product
     const latestApprovalRes = await client.query(
       `SELECT approval_request_id, approval_status, posting_status
        FROM post_approval
@@ -150,11 +162,16 @@ const handlePostTrigger = async (req, res, next) => {
 
     const latestApproval = latestApprovalRes.rows[0];
     if (latestApproval) {
-      const appStatus = (latestApproval.approval_status || '').toLowerCase().trim();
-      const postState = (latestApproval.posting_status || '').toLowerCase().trim();
+      const appStatus = normalizeStatus(latestApproval.approval_status);
+      const postState = normalizeStatus(latestApproval.posting_status);
 
-      // Block if active workflow is in progress or already approved
-      if (appStatus === 'pending' || postState === 'processing' || postState === 'awaiting approval') {
+      // Block if active workflow is in progress or already approved/publishing
+      if (
+        appStatus === 'pending' ||
+        postState === 'processing' ||
+        postState === 'awaiting approval' ||
+        postState === 'publishing'
+      ) {
         await client.query('ROLLBACK');
         return res.status(409).json({
           success: false,
@@ -168,35 +185,17 @@ const handlePostTrigger = async (req, res, next) => {
         return res.status(409).json({
           success: false,
           data: null,
-          message: `This product has already been approved / published.`,
+          message: 'This product has already been approved / published.',
         });
       }
 
-      // If status is 'rejected', allow new attempt! Historical record is preserved.
+      // If status is 'rejected' or 'failed', allow new attempt!
     }
 
-    // 4. Generate unique approval request ID for this attempt
-    const approvalRequestId = `REQ-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-
-    // 5. Insert new persistent approval attempt record (preserving history)
-    await client.query(
-      `INSERT INTO post_approval (
-        approval_request_id, product_id, approval_status, posting_status, created_at, updated_at
-      ) VALUES ($1, $2, 'Pending', 'Processing', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [approvalRequestId, productId]
-    );
-
+    // Release database lock — NO backend writes to post_approval or product table!
     await client.query('COMMIT');
 
-    // Broadcast live event to update UI immediately
-    broadcast('social:post-triggered', {
-      approvalRequestId,
-      productId,
-      status: 'Processing',
-    });
-    broadcast('products:changed', { action: 'updated', id: productId });
-
-    // 6. Trigger n8n Webhook: Send ONLY product_id
+    // 5. Trigger n8n Webhook: Send ONLY product_id
     const n8nUrl = N8N_INSTAGRAM_WEBHOOK_URL;
     let n8nTriggered = false;
     let n8nError = null;
@@ -226,24 +225,22 @@ const handlePostTrigger = async (req, res, next) => {
     }
 
     if (!n8nTriggered && n8nError) {
-      // Record failure on the approval record
-      await pool.query(
-        `UPDATE post_approval
-         SET posting_status = 'Failed', updated_at = CURRENT_TIMESTAMP
-         WHERE approval_request_id = $1`,
-        [approvalRequestId]
-      );
       return res.status(502).json({
         success: false,
-        data: { approvalRequestId, productId },
+        data: { productId },
         message: n8nError,
       });
     }
 
+    // Broadcast event that post trigger was sent so frontend can refresh/poll
+    broadcast('social:post-triggered', {
+      productId,
+      status: 'processing',
+    });
+
     res.status(200).json({
       success: true,
       data: {
-        approvalRequestId,
         productId,
         n8nTriggered: true,
       },
@@ -275,23 +272,23 @@ router.get('/approvals', authMiddleware, employeeRoleMiddleware('Social Media Ma
         a.product_id AS "productId",
         a.generated_caption AS "generatedCaption",
         a.enhanced_image_url AS "enhancedImageUrl",
-        a.approval_status AS "approvalStatus",
-        a.posting_status AS "postingStatus",
+        LOWER(TRIM(a.approval_status)) AS "approvalStatus",
+        LOWER(TRIM(a.posting_status)) AS "postingStatus",
         a.created_at AS "createdAt",
         a.updated_at AS "updatedAt",
         a.published_at AS "publishedAt",
         p.product_name AS "productName",
         p.base_price AS "price",
         p.image_url AS "productImageUrl",
-        p.post_status AS "currentPostStatus"
+        LOWER(TRIM(p.post_status)) AS "currentPostStatus"
       FROM post_approval a
       JOIN product p ON a.product_id = p.product_id
     `;
 
     const params = [];
     if (status && status !== 'all') {
-      params.push(status);
-      query += ` WHERE a.approval_status = $1`;
+      params.push(normalizeStatus(status));
+      query += ` WHERE LOWER(TRIM(a.approval_status)) = $1`;
     }
 
     query += ` ORDER BY a.created_at DESC`;
@@ -305,8 +302,10 @@ router.get('/approvals', authMiddleware, employeeRoleMiddleware('Social Media Ma
 
 // -----------------------------------------------------------------------------
 // 4. POST /api/v1/social/webhook/status-update
-// Secure callback endpoint allowing n8n to notify the application of status
-// changes (e.g. Gmail sent, approved, rejected, Instagram published)
+// Optional notification callback from n8n to broadcast real-time SSE updates.
+// The backend NEVER writes to post_approval or product from here. n8n directly
+// executes SQL UPDATE on post_approval and product in PostgreSQL.
+// This endpoint only broadcasts real-time SSE events to connected browsers.
 // -----------------------------------------------------------------------------
 router.post('/webhook/status-update', verifyN8nApiKey, async (req, res, next) => {
   try {
@@ -316,89 +315,28 @@ router.post('/webhook/status-update', verifyN8nApiKey, async (req, res, next) =>
       productId,
       approvalStatus,
       postingStatus,
-      generatedCaption,
-      enhancedImageUrl,
-      generatedImageUrl,
-      publishedAt,
     } = req.body;
 
-    const targetId = approvalRequestId || approvalId;
+    const finalRequestId = approvalRequestId || approvalId;
+    const normApproval = approvalStatus ? normalizeStatus(approvalStatus) : undefined;
+    const normPosting = postingStatus ? normalizeStatus(postingStatus) : undefined;
 
-    if (!targetId && !productId) {
-      return res.status(400).json({ success: false, data: null, message: 'approvalRequestId or productId is required' });
-    }
-
-    // Determine target approval record (latest for product if approvalRequestId not supplied)
-    let finalRequestId = targetId;
-    if (!finalRequestId && productId) {
-      const findRes = await pool.query(
-        `SELECT approval_request_id FROM post_approval WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1`,
-        [productId]
-      );
-      if (findRes.rows.length > 0) {
-        finalRequestId = findRes.rows[0].approval_request_id;
-      }
-    }
-
-    if (!finalRequestId) {
-      return res.status(404).json({ success: false, data: null, message: 'No matching approval record found' });
-    }
-
-    const enhancedImg = enhancedImageUrl || generatedImageUrl || null;
-
-    // Update post_approval table
-    await pool.query(
-      `UPDATE post_approval
-       SET approval_status = COALESCE($1, approval_status),
-           posting_status = COALESCE($2, posting_status),
-           generated_caption = COALESCE($3, generated_caption),
-           enhanced_image_url = COALESCE($4, enhanced_image_url),
-           published_at = CASE
-             WHEN $2 IN ('Published', 'Posted') AND published_at IS NULL THEN CURRENT_TIMESTAMP
-             ELSE COALESCE($5, published_at)
-           END,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE approval_request_id = $6`,
-      [
-        approvalStatus || null,
-        postingStatus || null,
-        generatedCaption || null,
-        enhancedImg,
-        publishedAt || null,
-        finalRequestId,
-      ]
-    );
-
-    // If Instagram publishing confirmed (postingStatus == 'Published' or 'Posted'):
-    // Update original product table's post_status to Published!
-    if (productId && (postingStatus === 'Published' || postingStatus === 'Posted' || approvalStatus === 'Approved')) {
-      await pool.query(
-        `UPDATE product
-         SET post_status = 'Published', updated_at = CURRENT_TIMESTAMP
-         WHERE product_id = $1`,
-        [productId]
-      );
-      broadcast('products:changed', { action: 'updated', id: productId, postStatus: 'Published' });
-    } else if (productId && approvalStatus === 'Rejected') {
-      // If rejected, keep product's post_status as 'Pending'
-      await pool.query(
-        `UPDATE product
-         SET post_status = 'Pending', updated_at = CURRENT_TIMESTAMP
-         WHERE product_id = $1`,
-        [productId]
-      );
-      broadcast('products:changed', { action: 'updated', id: productId, postStatus: 'Pending' });
-    }
-
-    // Broadcast SSE live update
+    // Broadcast SSE live update to connected clients
     broadcast('social:status-updated', {
       approvalRequestId: finalRequestId,
       productId,
-      approvalStatus,
-      postingStatus,
+      approvalStatus: normApproval,
+      postingStatus: normPosting,
     });
 
-    res.json({ success: true, message: 'Status update recorded and broadcast successfully' });
+    if (productId) {
+      broadcast('products:changed', { action: 'updated', id: productId });
+    }
+
+    res.json({
+      success: true,
+      message: 'SSE status update broadcast successfully (database was updated directly by n8n)',
+    });
   } catch (err) {
     next(err);
   }

@@ -13,21 +13,23 @@ import { useState, useEffect, useCallback } from 'react';
 import api, { getAssetUrl } from '../../services/api';
 import { useRealtimeSync } from '../../services/realtime';
 
+const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
+
 const STATUS_BADGES = {
-  Pending: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', label: 'Pending Approval' },
-  Approved: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Approved' },
-  Published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
-  Rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Rejected' },
+  pending: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', label: 'Pending Approval' },
+  approved: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Approved' },
+  published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Rejected' },
 };
 
 const POSTING_STATUS_BADGES = {
-  'Awaiting Approval': { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7' },
-  Processing: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6' },
-  Publishing: { bg: 'rgba(59, 130, 246, 0.2)', text: '#2563eb' },
-  Published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
-  Posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
-  Rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444' },
-  Failed: { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444' },
+  'awaiting approval': { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7', label: 'Awaiting Approval' },
+  processing: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6', label: 'Processing' },
+  publishing: { bg: 'rgba(59, 130, 246, 0.2)', text: '#2563eb', label: 'Publishing' },
+  published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Rejected' },
+  failed: { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444', label: 'Failed' },
 };
 
 const SocialPostConfirmation = () => {
@@ -69,27 +71,33 @@ const SocialPostConfirmation = () => {
     fetchApprovals();
   }, [fetchApprovals]));
 
-  // Categorize records into 3 sections
-  const pendingPosts = approvals.filter(
-    (item) =>
-      item.approvalStatus === 'Pending' ||
-      item.postingStatus === 'Awaiting Approval' ||
-      item.postingStatus === 'Processing' ||
-      item.postingStatus === 'Publishing'
-  );
+  // Categorize records into 3 sections using normalized status
+  const pendingPosts = approvals.filter((item) => {
+    const appStatus = normalizeStatus(item.approvalStatus);
+    const postState = normalizeStatus(item.postingStatus);
+    return (
+      appStatus === 'pending' ||
+      postState === 'awaiting approval' ||
+      postState === 'processing' ||
+      postState === 'publishing'
+    );
+  });
 
-  const publishedPosts = approvals.filter(
-    (item) =>
-      item.postingStatus === 'Published' ||
-      item.postingStatus === 'Posted' ||
-      item.approvalStatus === 'Approved'
-  );
+  const publishedPosts = approvals.filter((item) => {
+    const appStatus = normalizeStatus(item.approvalStatus);
+    const postState = normalizeStatus(item.postingStatus);
+    return (
+      postState === 'published' ||
+      postState === 'posted' ||
+      appStatus === 'approved'
+    );
+  });
 
-  const rejectedPosts = approvals.filter(
-    (item) =>
-      item.approvalStatus === 'Rejected' ||
-      item.postingStatus === 'Rejected'
-  );
+  const rejectedPosts = approvals.filter((item) => {
+    const appStatus = normalizeStatus(item.approvalStatus);
+    const postState = normalizeStatus(item.postingStatus);
+    return appStatus === 'rejected' || postState === 'rejected';
+  });
 
   const getDisplayedItems = () => {
     if (activeTab === 'Pending') return pendingPosts;
@@ -177,20 +185,23 @@ const SocialPostConfirmation = () => {
       {!loading && displayedItems.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: '1.5rem' }}>
           {displayedItems.map((item) => {
-            const isPending =
-              item.approvalStatus === 'Pending' ||
-              item.postingStatus === 'Awaiting Approval' ||
-              item.postingStatus === 'Processing' ||
-              item.postingStatus === 'Publishing';
-            const isPublished =
-              item.postingStatus === 'Published' ||
-              item.postingStatus === 'Posted' ||
-              item.approvalStatus === 'Approved';
-            const isRejected = item.approvalStatus === 'Rejected';
+            const appStatus = normalizeStatus(item.approvalStatus);
+            const postState = normalizeStatus(item.postingStatus);
 
-            const statusConfig = STATUS_BADGES[item.approvalStatus] || STATUS_BADGES.Pending;
+            const isPending =
+              appStatus === 'pending' ||
+              postState === 'awaiting approval' ||
+              postState === 'processing' ||
+              postState === 'publishing';
+            const isPublished =
+              postState === 'published' ||
+              postState === 'posted' ||
+              appStatus === 'approved';
+            const isRejected = appStatus === 'rejected' || postState === 'rejected';
+
+            const statusConfig = STATUS_BADGES[appStatus] || STATUS_BADGES.pending;
             const postingConfig =
-              POSTING_STATUS_BADGES[item.postingStatus] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af' };
+              POSTING_STATUS_BADGES[postState] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af', label: item.postingStatus };
             const previewImage = item.enhancedImageUrl || item.productImageUrl;
 
             return (
@@ -252,7 +263,7 @@ const SocialPostConfirmation = () => {
                         color: postingConfig.text,
                       }}
                     >
-                      {item.postingStatus}
+                      {postingConfig.label || item.postingStatus}
                     </span>
                   </div>
                 </div>

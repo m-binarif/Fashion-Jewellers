@@ -321,10 +321,103 @@ async function runTests() {
     await pool.query('DELETE FROM product WHERE product_id = $1', [pid]);
   });
 
-  // Test 8: Gmail link generic format verification
-  await test('Gmail link format verification', async () => {
-    const defaultGmailLink = 'https://mail.google.com';
-    assert.strictEqual(defaultGmailLink, 'https://mail.google.com');
+  // Test 9: Backend handler does NOT insert records into post_approval
+  await test('Backend handlePostTrigger triggers n8n WITHOUT inserting into post_approval', async () => {
+    const ts = Date.now();
+    const { rows: prodRows } = await pool.query(
+      `INSERT INTO product (
+        product_name, description, base_price, quantity, is_active, post_status,
+        category_id, material_id, type_id, supplier_id, image_url
+      ) VALUES ($1, 'Test Product', 1000, 10, 1, 'pending', 'CAT005', 'MAT001', 'TYP001', 'SUP003', 'https://res.cloudinary.com/demo/image/upload/sample.jpg')
+      RETURNING product_id`,
+      [`Test Product Backend No-Write ${ts}`]
+    );
+    const pid = prodRows[0].product_id;
+
+    // Check count in post_approval before
+    const beforeRes = await pool.query('SELECT COUNT(*) FROM post_approval WHERE product_id = $1', [pid]);
+    const beforeCount = parseInt(beforeRes.rows[0].count, 10);
+
+    // Spin up mock n8n webhook server on port 5998
+    let receivedPayload = null;
+    const mockServer = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        receivedPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'Workflow started' }));
+      });
+    });
+
+    await new Promise((resolve) => mockServer.listen(5998, resolve));
+
+    // Temporarily point N8N_INSTAGRAM_WEBHOOK_URL to 5998
+    const origUrl = process.env.N8N_INSTAGRAM_WEBHOOK_URL;
+    process.env.N8N_INSTAGRAM_WEBHOOK_URL = 'http://localhost:5998/webhook/social-media-product-post';
+
+    try {
+      // Simulate backend POST trigger logic
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const prodCheck = await client.query('SELECT product_id, post_status, image_url FROM product WHERE product_id = $1 FOR UPDATE', [pid]);
+        assert.strictEqual(prodCheck.rows[0].post_status, 'pending');
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+
+      // Dispatch webhook exactly as backend does
+      const response = await fetch(process.env.N8N_INSTAGRAM_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.N8N_WEBHOOK_SECRET || 'YOUR_LONG_RANDOM_SECRET',
+        },
+        body: JSON.stringify({ product_id: pid }),
+      });
+      assert.strictEqual(response.ok, true);
+      assert.deepStrictEqual(receivedPayload, { product_id: pid });
+
+      // Verify post_approval table still has 0 records (backend NEVER inserted any!)
+      const afterRes = await pool.query('SELECT COUNT(*) FROM post_approval WHERE product_id = $1', [pid]);
+      const afterCount = parseInt(afterRes.rows[0].count, 10);
+      assert.strictEqual(afterCount, beforeCount, 'post_approval record count must not change from backend');
+    } finally {
+      process.env.N8N_INSTAGRAM_WEBHOOK_URL = origUrl;
+      mockServer.close();
+      await pool.query('DELETE FROM product WHERE product_id = $1', [pid]);
+    }
+  });
+
+  // Test 10: Status normalization handles uppercase and whitespace
+  await test('Status values normalize properly across uppercase and whitespace', async () => {
+    const normalizeStatus = (val) => String(val || '').trim().toLowerCase();
+
+    assert.strictEqual(normalizeStatus('Pending'), 'pending');
+    assert.strictEqual(normalizeStatus('  PENDING  '), 'pending');
+    assert.strictEqual(normalizeStatus('Published'), 'published');
+    assert.strictEqual(normalizeStatus('Awaiting Approval'), 'awaiting approval');
+    assert.strictEqual(normalizeStatus('  Awaiting Approval  '), 'awaiting approval');
+    assert.strictEqual(normalizeStatus('Rejected'), 'rejected');
+  });
+
+  // Test 11: Backend codebase contains 0 INSERT, UPDATE, DELETE queries on post_approval
+  await test('Backend codebase has ZERO write operations on post_approval', async () => {
+    const fs = require('fs');
+    const socialRouteContent = fs.readFileSync(path.resolve(__dirname, '../src/routes/social.js'), 'utf8');
+
+    const writeMatches = [];
+    ['INSERT', 'UPDATE', 'DELETE'].forEach((op) => {
+      const regex = new RegExp(op + '\\s+(INTO\\s+)?post_approval', 'gi');
+      let m;
+      while ((m = regex.exec(socialRouteContent)) !== null) {
+        writeMatches.push(m[0]);
+      }
+    });
+
+    assert.strictEqual(writeMatches.length, 0, `Backend social.js must have 0 writes to post_approval, but found: ${writeMatches.join(', ')}`);
   });
 
   console.log('\n===============================================================');

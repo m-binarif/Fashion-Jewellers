@@ -18,6 +18,8 @@ import api, { getAssetUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import { useRealtimeSync } from '../../services/realtime';
 
+const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
+
 const POST_STATUS_COLORS = {
   pending: { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', label: 'Pending' },
   processing: { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6', label: 'Processing' },
@@ -30,7 +32,7 @@ const POST_STATUS_COLORS = {
 };
 
 const PostStatusBadge = ({ status, latestApprovalStatus }) => {
-  const norm = (status || 'pending').toLowerCase();
+  const norm = normalizeStatus(status) || 'pending';
   const c = POST_STATUS_COLORS[norm] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af', label: status || '—' };
 
   return (
@@ -55,7 +57,7 @@ const PostStatusBadge = ({ status, latestApprovalStatus }) => {
       </span>
       {latestApprovalStatus && norm === 'pending' && (
         <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-          Latest Attempt: <strong>{latestApprovalStatus}</strong>
+          Latest Attempt: <strong>{POST_STATUS_COLORS[normalizeStatus(latestApprovalStatus)]?.label || latestApprovalStatus}</strong>
         </span>
       )}
     </div>
@@ -106,11 +108,16 @@ const SocialProducts = () => {
 
   /**
    * Post Button Visibility Logic:
-   * 1. Product's post_status must be 'Pending' (never 'Published')
-   * 2. AND (no approval record exists OR latest approval attempt status is 'Rejected')
+   * 1. Product's post_status must be 'pending' (never 'published')
+   * 2. AND (no approval record exists OR latest approval attempt status is 'rejected')
+   *
+   * Hidden when:
+   * - Product is published
+   * - Latest approval is pending / approved
+   * - Latest posting is processing / awaiting approval / publishing
    */
   const canShowPostButton = (product) => {
-    const postStatus = (product.post_status || 'pending').toLowerCase().trim();
+    const postStatus = normalizeStatus(product.post_status) || 'pending';
     if (postStatus === 'published' || postStatus === 'posted') {
       return false;
     }
@@ -118,25 +125,26 @@ const SocialProducts = () => {
       return false;
     }
 
-    const latestStatus = product.latestApprovalStatus ? product.latestApprovalStatus.toLowerCase().trim() : null;
-    const latestPosting = product.latestPostingStatus ? product.latestPostingStatus.toLowerCase().trim() : null;
+    const latestStatus = product.latestApprovalStatus ? normalizeStatus(product.latestApprovalStatus) : null;
+    const latestPosting = product.latestPostingStatus ? normalizeStatus(product.latestPostingStatus) : null;
 
     // If no record exists yet -> SHOW
     if (!latestStatus) {
       return true;
     }
 
-    // If latest attempt was Rejected -> SHOW (allows retrying)
+    // If latest attempt was rejected -> SHOW (allows retrying)
     if (latestStatus === 'rejected') {
       return true;
     }
 
-    // If latest attempt is Pending, Processing, Awaiting Approval, Approved -> HIDE
+    // If latest attempt is pending, approved, processing, awaiting approval, publishing -> HIDE
     if (
       latestStatus === 'pending' ||
       latestStatus === 'approved' ||
       latestPosting === 'processing' ||
-      latestPosting === 'awaiting approval'
+      latestPosting === 'awaiting approval' ||
+      latestPosting === 'publishing'
     ) {
       return false;
     }
@@ -178,8 +186,8 @@ const SocialProducts = () => {
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();
     const matchesSearch = !q || (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
-    const postNorm = (p.post_status || 'pending').toLowerCase();
-    const matchesFilter = !filterStatus || postNorm === filterStatus.toLowerCase();
+    const postNorm = normalizeStatus(p.post_status) || 'pending';
+    const matchesFilter = !filterStatus || postNorm === normalizeStatus(filterStatus);
     return matchesSearch && matchesFilter;
   });
 
@@ -298,7 +306,7 @@ const SocialProducts = () => {
                           onClick={() => handlePostClick(product)}
                           disabled={isTriggering || triggeringId !== null}
                           className="btn"
-                          title={product.latestApprovalStatus === 'Rejected' ? 'Re-trigger post generation' : 'Generate Instagram Post'}
+                          title={normalizeStatus(product.latestApprovalStatus) === 'rejected' ? 'Re-trigger post generation' : 'Generate Instagram Post'}
                           style={{
                             padding: '0.45rem 1rem',
                             fontSize: '0.82rem',
