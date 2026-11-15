@@ -1,40 +1,40 @@
 /**
- * SocialPostConfirmation.jsx — Post Confirmation & Approval Page.
- * Displays all generated Instagram posts awaiting approval or with historical decisions.
- * Provides Approve and Reject buttons connected to the n8n approval workflow.
+ * SocialPostConfirmation.jsx — Post Confirmation & Approval Tracking Page.
+ * Organized into 3 main sections:
+ * 1. Pending Approval: Shows posts waiting for Gmail decision with direct "Open Gmail" link (NO dashboard Approve/Reject buttons)
+ * 2. Published Posts: Shows successfully published Instagram posts with Instagram Post ID
+ * 3. Rejected Posts: Shows historical rejected attempts with rejection reasons
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import api, { getAssetUrl } from '../../services/api';
-import { useToast } from '../../context/ToastContext';
 import { useRealtimeSync } from '../../services/realtime';
 
 const STATUS_BADGES = {
-  Pending:   { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', label: 'Pending Approval' },
-  Approved:  { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', label: 'Approved' },
-  Rejected:  { bg: 'rgba(239, 68, 68, 0.15)',  text: '#ef4444', label: 'Rejected' },
+  Pending: { bg: 'rgba(245, 158, 11, 0.15)', text: '#f59e0b', label: 'Pending Approval' },
+  Approved: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Approved' },
+  Published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  Rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Rejected' },
 };
 
 const POSTING_STATUS_BADGES = {
   'Awaiting Approval': { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7' },
-  Processing:          { bg: 'rgba(59, 130, 246, 0.15)',  text: '#3b82f6' },
-  Posted:              { bg: 'rgba(34, 197, 94, 0.15)',   text: '#22c55e' },
-  Rejected:            { bg: 'rgba(239, 68, 68, 0.15)',   text: '#ef4444' },
-  Failed:              { bg: 'rgba(239, 68, 68, 0.2)',    text: '#ef4444' },
+  Processing: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6' },
+  Published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
+  Posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
+  Rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444' },
+  Failed: { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444' },
 };
 
 const SocialPostConfirmation = () => {
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // 'all' | 'Pending' | 'Approved' | 'Rejected'
-  const [processingId, setProcessingId] = useState(null);
-  const { showSuccess, showError } = useToast();
+  const [activeTab, setActiveTab] = useState('Pending'); // 'Pending' | 'Published' | 'Rejected' | 'all'
 
   const fetchApprovals = useCallback(async () => {
     try {
       setLoading(true);
-      const url = filter === 'all' ? '/social/approvals' : `/social/approvals?status=${filter}`;
-      const res = await api.get(url);
+      const res = await api.get('/social/approvals');
       if (res.data.success) {
         setApprovals(res.data.data || []);
       }
@@ -43,13 +43,16 @@ const SocialPostConfirmation = () => {
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
     fetchApprovals();
+    // 5-second polling fallback so external n8n updates show up automatically
+    const interval = setInterval(fetchApprovals, 5000);
+    return () => clearInterval(interval);
   }, [fetchApprovals]);
 
-  // Real-time synchronization: Auto-refresh when new posts are generated or statuses update
+  // Real-time synchronization
   useRealtimeSync('social:approval-created', useCallback(() => {
     fetchApprovals();
   }, [fetchApprovals]));
@@ -58,25 +61,44 @@ const SocialPostConfirmation = () => {
     fetchApprovals();
   }, [fetchApprovals]));
 
-  const handleDecision = async (approvalId, decision) => {
-    if (processingId) return;
+  useRealtimeSync('social:post-triggered', useCallback(() => {
+    fetchApprovals();
+  }, [fetchApprovals]));
 
-    try {
-      setProcessingId(approvalId);
+  // Categorize records into 3 sections
+  const pendingPosts = approvals.filter(
+    (item) =>
+      item.approvalStatus === 'Pending' ||
+      item.postingStatus === 'Awaiting Approval' ||
+      item.postingStatus === 'Processing'
+  );
 
-      const res = await api.post(`/social/approvals/${approvalId}/decision`, {
-        decision,
-      });
+  const publishedPosts = approvals.filter(
+    (item) =>
+      item.postingStatus === 'Published' ||
+      item.postingStatus === 'Posted' ||
+      (item.approvalStatus === 'Approved' && item.instagramPostId)
+  );
 
-      if (res.data.success) {
-        showSuccess(res.data.message || `Post ${decision === 'approve' ? 'approved' : 'rejected'} successfully.`);
-        fetchApprovals();
-      }
-    } catch (err) {
-      showError(err.response?.data?.message || `Failed to ${decision} post: ` + err.message);
-    } finally {
-      setProcessingId(null);
-    }
+  const rejectedPosts = approvals.filter(
+    (item) =>
+      item.approvalStatus === 'Rejected' ||
+      item.postingStatus === 'Rejected'
+  );
+
+  const getDisplayedItems = () => {
+    if (activeTab === 'Pending') return pendingPosts;
+    if (activeTab === 'Published') return publishedPosts;
+    if (activeTab === 'Rejected') return rejectedPosts;
+    return approvals;
+  };
+
+  const displayedItems = getDisplayedItems();
+
+  const getGmailUrl = (item) => {
+    if (item.gmailLink) return item.gmailLink;
+    if (item.gmailThreadId) return `https://mail.google.com/mail/u/0/#all/${item.gmailThreadId}`;
+    return 'https://mail.google.com';
   };
 
   return (
@@ -84,23 +106,27 @@ const SocialPostConfirmation = () => {
       {/* Header */}
       <div style={{ marginBottom: '1.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Post Confirmation & Approval</h2>
+          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Post Confirmation & History</h2>
           <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Review AI-generated Instagram posts, captions, and creative assets before publishing to Instagram.
+            Track automated Instagram posts, inspect AI-generated captions, and open Gmail approval emails.
           </p>
         </div>
 
-        {/* Status Filter Tabs */}
+        {/* Section Tabs */}
         <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'var(--bg-secondary)', padding: '0.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-          {['all', 'Pending', 'Approved', 'Rejected'].map((statusKey) => {
-            const isActive = filter === statusKey;
-            const label = statusKey === 'all' ? 'All Requests' : statusKey;
+          {[
+            { id: 'Pending', label: `Pending Approval (${pendingPosts.length})` },
+            { id: 'Published', label: `Published (${publishedPosts.length})` },
+            { id: 'Rejected', label: `Rejected History (${rejectedPosts.length})` },
+            { id: 'all', label: `All (${approvals.length})` },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
             return (
               <button
-                key={statusKey}
-                onClick={() => setFilter(statusKey)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
                 style={{
-                  padding: '0.4rem 0.85rem',
+                  padding: '0.45rem 0.9rem',
                   fontSize: '0.82rem',
                   fontWeight: isActive ? 600 : 400,
                   borderRadius: '6px',
@@ -111,7 +137,7 @@ const SocialPostConfirmation = () => {
                   transition: 'all 0.15s ease',
                 }}
               >
-                {label}
+                {tab.label}
               </button>
             );
           })}
@@ -119,34 +145,54 @@ const SocialPostConfirmation = () => {
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {loading && approvals.length === 0 && (
         <div style={{ padding: '4rem', textAlign: 'center' }}>
           <div className="loader" style={{ margin: '0 auto' }} />
         </div>
       )}
 
       {/* Empty State */}
-      {!loading && approvals.length === 0 && (
+      {!loading && displayedItems.length === 0 && (
         <div className="card" style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📱</div>
-          <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>No Posts Awaiting Confirmation</h3>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>
+            {activeTab === 'Pending' ? '📬' : activeTab === 'Published' ? '📸' : '📁'}
+          </div>
+          <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>
+            {activeTab === 'Pending'
+              ? 'No Posts Awaiting Gmail Approval'
+              : activeTab === 'Published'
+              ? 'No Published Instagram Posts Yet'
+              : activeTab === 'Rejected'
+              ? 'No Rejected Posts'
+              : 'No Records Found'}
+          </h3>
           <p style={{ margin: 0, fontSize: '0.9rem' }}>
-            {filter === 'Pending'
-              ? 'There are currently no generated posts waiting for your approval.'
-              : 'No post approval requests found matching the current filter.'}
+            {activeTab === 'Pending'
+              ? 'When you trigger a post from the Products page, the approval request and Gmail notification link will appear here.'
+              : 'Posts approved via Gmail will be published to Instagram and archived here.'}
           </p>
         </div>
       )}
 
-      {/* Approvals Grid */}
-      {!loading && approvals.length > 0 && (
+      {/* Post Cards Grid */}
+      {!loading && displayedItems.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: '1.5rem' }}>
-          {approvals.map((item) => {
-            const isPending = item.approvalStatus === 'Pending';
-            const isProcessing = processingId === item.approvalId;
+          {displayedItems.map((item) => {
+            const isPending =
+              item.approvalStatus === 'Pending' ||
+              item.postingStatus === 'Awaiting Approval' ||
+              item.postingStatus === 'Processing';
+            const isPublished =
+              item.postingStatus === 'Published' ||
+              item.postingStatus === 'Posted' ||
+              item.approvalStatus === 'Approved';
+            const isRejected = item.approvalStatus === 'Rejected';
+
             const statusConfig = STATUS_BADGES[item.approvalStatus] || STATUS_BADGES.Pending;
-            const postingConfig = POSTING_STATUS_BADGES[item.postingStatus] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af' };
+            const postingConfig =
+              POSTING_STATUS_BADGES[item.postingStatus] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af' };
             const previewImage = item.generatedImageUrl || item.productImageUrl;
+            const gmailUrl = getGmailUrl(item);
 
             return (
               <div
@@ -156,7 +202,13 @@ const SocialPostConfirmation = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   overflow: 'hidden',
-                  border: isPending ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid var(--border-color)',
+                  border: isPending
+                    ? '1px solid rgba(245, 158, 11, 0.35)'
+                    : isPublished
+                    ? '1px solid rgba(34, 197, 94, 0.3)'
+                    : isRejected
+                    ? '1px solid rgba(239, 68, 68, 0.3)'
+                    : '1px solid var(--border-color)',
                   boxShadow: isPending ? '0 4px 12px rgba(245, 158, 11, 0.08)' : 'none',
                 }}
               >
@@ -206,9 +258,9 @@ const SocialPostConfirmation = () => {
                   </div>
                 </div>
 
-                {/* Card Content Split */}
+                {/* Card Body */}
                 <div style={{ padding: '1.25rem', display: 'flex', gap: '1.25rem', flex: 1 }}>
-                  {/* Left: Image Preview */}
+                  {/* Left: Enhanced Image Preview */}
                   <div style={{ width: '160px', flexShrink: 0 }}>
                     <div
                       style={{
@@ -246,7 +298,7 @@ const SocialPostConfirmation = () => {
                           fontWeight: 600,
                         }}
                       >
-                        Preview
+                        {item.generatedImageUrl ? 'Enhanced' : 'Original'}
                       </div>
                     </div>
 
@@ -257,7 +309,7 @@ const SocialPostConfirmation = () => {
                     </div>
                   </div>
 
-                  {/* Right: Post Details */}
+                  {/* Right: Details & Caption */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.98rem', marginBottom: '0.25rem' }}>
                       {item.productName}
@@ -267,7 +319,7 @@ const SocialPostConfirmation = () => {
                       Price: Rs. {Number(item.price || 0).toLocaleString()}
                     </div>
 
-                    {/* Instagram Caption Box */}
+                    {/* Caption Preview Box */}
                     <div
                       style={{
                         flex: 1,
@@ -286,97 +338,110 @@ const SocialPostConfirmation = () => {
                     >
                       {item.generatedCaption || (
                         <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-                          Caption generation in progress...
+                          Caption generation in progress by n8n AI workflow...
                         </span>
                       )}
                     </div>
 
-                    {/* Meta info */}
+                    {/* Metadata */}
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Workflow Ref: {item.executionId || item.approvalId}</span>
+                      <span>Attempt ID: {item.approvalId}</span>
                       <span>
-                        {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {item.createdAt
+                          ? new Date(item.createdAt).toLocaleDateString('en-GB', {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : '—'}
                       </span>
                     </div>
 
-                    {/* Instagram Post Link if already posted */}
+                    {/* Instagram Publication Notice */}
                     {item.instagramPostId && (
-                      <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: '#22c55e', fontWeight: 600 }}>
-                        ✓ Published to Instagram (Post ID: {item.instagramPostId})
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#22c55e', fontWeight: 600 }}>
+                        ✓ Published to Instagram (Post ID: <code>{item.instagramPostId}</code>)
                       </div>
                     )}
 
-                    {/* Error message if failed */}
-                    {item.errorMessage && (
-                      <div style={{ marginTop: '0.4rem', fontSize: '0.75rem', color: 'var(--error-color)' }}>
-                        ⚠️ {item.errorMessage}
+                    {/* Rejection / Error Message */}
+                    {(item.rejectionReason || item.errorMessage) && (
+                      <div
+                        style={{
+                          marginTop: '0.5rem',
+                          fontSize: '0.78rem',
+                          color: 'var(--error-color)',
+                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                          padding: '0.4rem 0.6rem',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        ⚠️ {item.rejectionReason || item.errorMessage}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Card Action Footer */}
+                {/* Card Action Footer: Strict requirement - NO dashboard Approve/Reject buttons! */}
                 <div
                   style={{
                     padding: '0.85rem 1.25rem',
                     borderTop: '1px solid var(--border-color)',
                     backgroundColor: 'var(--bg-tertiary)',
                     display: 'flex',
-                    justifyContent: 'flex-end',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     gap: '0.75rem',
                   }}
                 >
                   {isPending ? (
                     <>
-                      <button
-                        onClick={() => handleDecision(item.approvalId, 'reject')}
-                        disabled={isProcessing}
-                        className="btn btn-outline"
-                        style={{
-                          padding: '0.45rem 1rem',
-                          fontSize: '0.82rem',
-                          borderColor: 'var(--error-color)',
-                          color: 'var(--error-color)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                        }}
-                      >
-                        <span>✕</span> Reject
-                      </button>
-
-                      <button
-                        onClick={() => handleDecision(item.approvalId, 'approve')}
-                        disabled={isProcessing}
-                        className="btn btn-primary"
-                        style={{
-                          padding: '0.45rem 1.2rem',
-                          fontSize: '0.82rem',
-                          backgroundColor: '#22c55e',
-                          color: '#fff',
-                          border: 'none',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                        }}
-                      >
-                        {isProcessing ? (
-                          <>
-                            <span className="loader" style={{ width: 14, height: 14, borderWidth: 2, borderColor: '#fff', borderTopColor: 'transparent' }} />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <span>✓</span> Approve & Publish
-                          </>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        <span>Awaiting decision via Gmail</span>
+                        {item.gmailThreadId && (
+                          <span style={{ marginLeft: '0.4rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            (Thread: {item.gmailThreadId.slice(0, 12)}...)
+                          </span>
                         )}
-                      </button>
+                      </div>
+
+                      {/* Direct Gmail Deep Link */}
+                      <a
+                        href={gmailUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn"
+                        style={{
+                          padding: '0.45rem 1.1rem',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          borderRadius: '6px',
+                          backgroundColor: '#ea4335',
+                          color: '#fff',
+                          textDecoration: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          border: 'none',
+                          boxShadow: '0 2px 6px rgba(234, 67, 53, 0.3)',
+                        }}
+                      >
+                        <span>✉️</span> Open Gmail
+                      </a>
                     </>
+                  ) : isPublished ? (
+                    <div style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 600 }}>
+                      ✓ Successfully Approved via Gmail & Published to Instagram
+                    </div>
+                  ) : isRejected ? (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Rejected via Gmail. You can re-attempt posting this product from the{' '}
+                      <strong>Products</strong> page.
+                    </div>
                   ) : (
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      Decision recorded ({item.approvalStatus}) on{' '}
-                      {item.decidedAt ? new Date(item.decidedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      Status: {item.approvalStatus}
                     </div>
                   )}
                 </div>

@@ -1,7 +1,16 @@
 /**
  * SocialProducts.jsx — Dedicated Products Page for Social Media Managers.
- * Displays existing product records from the database in read-only mode,
- * with conditional "Post" button for products with 'Pending' post status.
+ * Displays existing product records from PostgreSQL in read-only mode,
+ * with conditional "Post" button based on exact business logic:
+ *
+ * Post button is VISIBLE ONLY when:
+ * 1. Product's post_status is 'Pending'
+ * 2. AND (no approval record exists OR latest approval attempt status is 'Rejected')
+ *
+ * Post button is HIDDEN when:
+ * - Product's post_status is 'Published'
+ * - Latest approval attempt is 'Pending', 'Processing', 'Awaiting Approval', 'Approved'
+ * - Product is currently being processed by n8n
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,36 +19,46 @@ import { useToast } from '../../context/ToastContext';
 import { useRealtimeSync } from '../../services/realtime';
 
 const POST_STATUS_COLORS = {
-  pending:             { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', label: 'Pending' },
-  processing:          { bg: 'rgba(59, 130, 246, 0.12)',  text: '#3b82f6', label: 'Processing' },
+  pending: { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', label: 'Pending' },
+  processing: { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6', label: 'Processing' },
   'awaiting approval': { bg: 'rgba(168, 85, 247, 0.12)', text: '#a855f7', label: 'Awaiting Approval' },
-  approved:            { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981', label: 'Approved' },
-  posted:              { bg: 'rgba(34, 197, 94, 0.15)',  text: '#22c55e', label: 'Posted' },
-  rejected:            { bg: 'rgba(239, 68, 68, 0.12)',  text: '#ef4444', label: 'Rejected' },
-  failed:              { bg: 'rgba(239, 68, 68, 0.15)',  text: '#ef4444', label: 'Failed' },
+  approved: { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981', label: 'Approved' },
+  posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
+  rejected: { bg: 'rgba(239, 68, 68, 0.12)', text: '#ef4444', label: 'Rejected' },
+  failed: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Failed' },
 };
 
-const PostStatusBadge = ({ status }) => {
+const PostStatusBadge = ({ status, latestApprovalStatus }) => {
   const norm = (status || 'pending').toLowerCase();
   const c = POST_STATUS_COLORS[norm] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af', label: status || '—' };
+
   return (
-    <span
-      style={{
-        padding: '0.25rem 0.65rem',
-        borderRadius: '20px',
-        fontSize: '0.75rem',
-        fontWeight: 600,
-        backgroundColor: c.bg,
-        color: c.text,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.35rem',
-        textTransform: 'capitalize',
-      }}
-    >
-      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: c.text }} />
-      {c.label}
-    </span>
+    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.2rem' }}>
+      <span
+        style={{
+          padding: '0.25rem 0.65rem',
+          borderRadius: '20px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          backgroundColor: c.bg,
+          color: c.text,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          textTransform: 'capitalize',
+          width: 'fit-content',
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: c.text }} />
+        {c.label}
+      </span>
+      {latestApprovalStatus && norm === 'pending' && (
+        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+          Latest Attempt: <strong>{latestApprovalStatus}</strong>
+        </span>
+      )}
+    </div>
   );
 };
 
@@ -53,10 +72,10 @@ const SocialProducts = () => {
 
   const fetchProducts = useCallback(async () => {
     try {
-      setLoading(true);
-      const res = await api.get('/products?pageSize=100');
+      // Use dedicated social endpoint that returns products with latest approval status
+      const res = await api.get('/social/products');
       if (res.data.success) {
-        setProducts(res.data.data.products || res.data.data || []);
+        setProducts(res.data.data || []);
       }
     } catch (err) {
       console.error('Failed to load products for social dashboard:', err);
@@ -67,9 +86,12 @@ const SocialProducts = () => {
 
   useEffect(() => {
     fetchProducts();
+    // 5-second polling fallback in addition to SSE
+    const interval = setInterval(fetchProducts, 5000);
+    return () => clearInterval(interval);
   }, [fetchProducts]);
 
-  // Real-time synchronization: Auto-refresh when products or posting status updates
+  // Real-time synchronization
   useRealtimeSync('products:changed', useCallback(() => {
     fetchProducts();
   }, [fetchProducts]));
@@ -82,33 +104,71 @@ const SocialProducts = () => {
     fetchProducts();
   }, [fetchProducts]));
 
+  /**
+   * Post Button Visibility Logic:
+   * 1. Product's post_status must be 'Pending' (never 'Published')
+   * 2. AND (no approval record exists OR latest approval attempt status is 'Rejected')
+   */
+  const canShowPostButton = (product) => {
+    const postStatus = (product.post_status || 'pending').toLowerCase().trim();
+    if (postStatus === 'published' || postStatus === 'posted') {
+      return false;
+    }
+    if (postStatus !== 'pending') {
+      return false;
+    }
+
+    const latestStatus = product.latestApprovalStatus ? product.latestApprovalStatus.toLowerCase().trim() : null;
+    const latestPosting = product.latestPostingStatus ? product.latestPostingStatus.toLowerCase().trim() : null;
+
+    // If no record exists yet -> SHOW
+    if (!latestStatus) {
+      return true;
+    }
+
+    // If latest attempt was Rejected -> SHOW (allows retrying)
+    if (latestStatus === 'rejected') {
+      return true;
+    }
+
+    // If latest attempt is Pending, Processing, Awaiting Approval, Approved -> HIDE
+    if (
+      latestStatus === 'pending' ||
+      latestStatus === 'approved' ||
+      latestPosting === 'processing' ||
+      latestPosting === 'awaiting approval'
+    ) {
+      return false;
+    }
+
+    return false;
+  };
+
   const handlePostClick = async (product) => {
-    // 1. Guard against in-flight triggers
     if (triggeringId) return;
 
-    // 2. Validate current post_status is pending
-    const currentStatus = (product.post_status || '').toLowerCase().trim();
-    if (currentStatus !== 'pending') {
-      showError(`Only products with 'Pending' post status can be posted. Current status: ${product.post_status}`);
+    if (!canShowPostButton(product)) {
+      showError('This product is not currently eligible for posting.');
       return;
     }
 
     try {
       setTriggeringId(product.id);
 
-      const res = await api.post('/social/trigger-post', {
-        productId: product.id,
-      });
+      // Call backend API: passes only productId in the route
+      const res = await api.post(`/social/products/${product.id}/post`);
 
       if (res.data.success) {
-        showSuccess(res.data.data?.note || 'Post generation initiated! n8n workflow triggered.');
-        // Optimistically update product post_status to Processing
-        setProducts((prev) =>
-          prev.map((p) => (p.id === product.id ? { ...p, post_status: 'Processing' } : p))
+        showSuccess(
+          res.data.message ||
+            'Post workflow triggered! n8n is retrieving product details from PostgreSQL to generate the post.'
         );
+        // Refresh product list immediately
+        fetchProducts();
       }
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to trigger post workflow: ' + err.message);
+      const msg = err.response?.data?.message || err.message;
+      showError(`Failed to trigger post: ${msg}`);
     } finally {
       setTriggeringId(null);
     }
@@ -155,8 +215,7 @@ const SocialProducts = () => {
           <option value="pending">Pending</option>
           <option value="processing">Processing</option>
           <option value="awaiting approval">Awaiting Approval</option>
-          <option value="approved">Approved</option>
-          <option value="posted">Posted</option>
+          <option value="published">Published</option>
           <option value="rejected">Rejected</option>
           <option value="failed">Failed</option>
         </select>
@@ -165,7 +224,7 @@ const SocialProducts = () => {
       {/* Table Card */}
       <div className="card bg-bg-secondary overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center">
+          <div className="p-8 text-center" style={{ padding: '3rem' }}>
             <div className="loader" style={{ margin: '0 auto' }} />
           </div>
         ) : (
@@ -174,14 +233,14 @@ const SocialProducts = () => {
               <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)' }}>
                 <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product ID</th>
                 <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product Name</th>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Status</th>
+                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product Status</th>
                 <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Post Status</th>
                 <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredProducts.map((product) => {
-                const isPending = (product.post_status || 'pending').toLowerCase() === 'pending';
+                const showButton = canShowPostButton(product);
                 const isTriggering = triggeringId === product.id;
 
                 return (
@@ -226,16 +285,20 @@ const SocialProducts = () => {
 
                     {/* 4. Post Status */}
                     <td className="p-4">
-                      <PostStatusBadge status={product.post_status} />
+                      <PostStatusBadge
+                        status={product.post_status}
+                        latestApprovalStatus={product.latestApprovalStatus}
+                      />
                     </td>
 
-                    {/* 5. Action */}
+                    {/* 5. Action (Post Button) */}
                     <td className="p-4">
-                      {isPending ? (
+                      {showButton ? (
                         <button
                           onClick={() => handlePostClick(product)}
                           disabled={isTriggering || triggeringId !== null}
                           className="btn"
+                          title={product.latestApprovalStatus === 'Rejected' ? 'Re-trigger post generation' : 'Generate Instagram Post'}
                           style={{
                             padding: '0.45rem 1rem',
                             fontSize: '0.82rem',
@@ -256,7 +319,7 @@ const SocialProducts = () => {
                           {isTriggering ? (
                             <>
                               <span className="loader" style={{ width: 14, height: 14, borderWidth: 2, borderColor: '#fff', borderTopColor: 'transparent' }} />
-                              Posting...
+                              Triggering...
                             </>
                           ) : (
                             <>

@@ -22,12 +22,24 @@ async function initSocialTable() {
       error_message          TEXT,
       decision_token         VARCHAR(100) UNIQUE,
       decided_at             TIMESTAMP,
+      gmail_thread_id        VARCHAR(100),
+      gmail_message_id       VARCHAR(100),
+      gmail_link             TEXT,
+      email_sent_at          TIMESTAMP,
+      rejection_reason       TEXT,
       created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_thread_id VARCHAR(100);
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_message_id VARCHAR(100);
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_link TEXT;
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP;
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+
     CREATE INDEX IF NOT EXISTS idx_post_approval_product ON post_approval(product_id);
     CREATE INDEX IF NOT EXISTS idx_post_approval_status ON post_approval(approval_status);
+    CREATE INDEX IF NOT EXISTS idx_post_approval_created_at ON post_approval(created_at DESC);
   `;
 
   try {
