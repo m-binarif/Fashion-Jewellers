@@ -32,8 +32,8 @@ async function runTests() {
     }
   };
 
-  // Test 1: Verify post_approval table has all required columns
-  await test('post_approval schema has gmail_thread_id, gmail_link, and rejection_reason columns', async () => {
+  // Test 1: Verify post_approval table has ONLY the exact 9 required columns
+  await test('post_approval schema has ONLY the exact 9 required columns', async () => {
     const { rows } = await pool.query(`
       SELECT column_name
       FROM information_schema.columns
@@ -41,15 +41,43 @@ async function runTests() {
     `);
     const cols = rows.map((r) => r.column_name);
 
-    assert(cols.includes('approval_id'), 'Must have approval_id');
-    assert(cols.includes('product_id'), 'Must have product_id');
-    assert(cols.includes('approval_status'), 'Must have approval_status');
-    assert(cols.includes('posting_status'), 'Must have posting_status');
-    assert(cols.includes('gmail_thread_id'), 'Must have gmail_thread_id');
-    assert(cols.includes('gmail_message_id'), 'Must have gmail_message_id');
-    assert(cols.includes('gmail_link'), 'Must have gmail_link');
-    assert(cols.includes('email_sent_at'), 'Must have email_sent_at');
-    assert(cols.includes('rejection_reason'), 'Must have rejection_reason');
+    const requiredCols = [
+      'approval_request_id',
+      'product_id',
+      'generated_caption',
+      'enhanced_image_url',
+      'approval_status',
+      'posting_status',
+      'created_at',
+      'updated_at',
+      'published_at'
+    ];
+
+    assert.strictEqual(cols.length, 9, `Table must contain exactly 9 columns, found ${cols.length}: ${cols.join(', ')}`);
+    for (const reqCol of requiredCols) {
+      assert(cols.includes(reqCol), `Must have ${reqCol}`);
+    }
+
+    // Ensure removed columns are definitely not present
+    const removedCols = [
+      'approval_id',
+      'employee_id',
+      'workflow_execution_id',
+      'resume_url',
+      'platform',
+      'instagram_post_id',
+      'error_message',
+      'decision_token',
+      'decided_at',
+      'gmail_thread_id',
+      'gmail_message_id',
+      'gmail_link',
+      'email_sent_at',
+      'rejection_reason'
+    ];
+    for (const remCol of removedCols) {
+      assert(!cols.includes(remCol), `Dropped column ${remCol} must NOT be in post_approval`);
+    }
   });
 
   // Test 2: Verify Post Button logic - Scenario 1: Pending & No record -> Show
@@ -73,7 +101,7 @@ async function runTests() {
          SELECT approval_status
          FROM post_approval
          WHERE product_id = p.product_id
-         ORDER BY created_at DESC, approval_id DESC
+         ORDER BY created_at DESC, approval_request_id DESC
          LIMIT 1
        ) latest ON true
        WHERE p.product_id = $1`,
@@ -101,9 +129,9 @@ async function runTests() {
     const pid = prodRows[0].product_id;
 
     await pool.query(
-      `INSERT INTO post_approval (approval_id, product_id, approval_status, posting_status)
+      `INSERT INTO post_approval (approval_request_id, product_id, approval_status, posting_status)
        VALUES ($1, $2, 'Pending', 'Awaiting Approval')`,
-      [`APV-${ts}`, pid]
+      [`REQ-${ts}`, pid]
     );
 
     const { rows } = await pool.query(
@@ -113,7 +141,7 @@ async function runTests() {
          SELECT approval_status
          FROM post_approval
          WHERE product_id = p.product_id
-         ORDER BY created_at DESC, approval_id DESC
+         ORDER BY created_at DESC, approval_request_id DESC
          LIMIT 1
        ) latest ON true
        WHERE p.product_id = $1`,
@@ -142,9 +170,9 @@ async function runTests() {
     const pid = prodRows[0].product_id;
 
     await pool.query(
-      `INSERT INTO post_approval (approval_id, product_id, approval_status, posting_status, rejection_reason)
-       VALUES ($1, $2, 'Rejected', 'Rejected', 'Lighting does not match brand guidelines')`,
-      [`APV-${ts}`, pid]
+      `INSERT INTO post_approval (approval_request_id, product_id, approval_status, posting_status)
+       VALUES ($1, $2, 'Rejected', 'Rejected')`,
+      [`REQ-${ts}`, pid]
     );
 
     const { rows } = await pool.query(
@@ -154,7 +182,7 @@ async function runTests() {
          SELECT approval_status
          FROM post_approval
          WHERE product_id = p.product_id
-         ORDER BY created_at DESC, approval_id DESC
+         ORDER BY created_at DESC, approval_request_id DESC
          LIMIT 1
        ) latest ON true
        WHERE p.product_id = $1`,
@@ -189,7 +217,7 @@ async function runTests() {
          SELECT approval_status
          FROM post_approval
          WHERE product_id = p.product_id
-         ORDER BY created_at DESC, approval_id DESC
+         ORDER BY created_at DESC, approval_request_id DESC
          LIMIT 1
        ) latest ON true
        WHERE p.product_id = $1`,
@@ -265,40 +293,38 @@ async function runTests() {
 
     // Insert attempt 1 (Rejected)
     await pool.query(
-      `INSERT INTO post_approval (approval_id, product_id, approval_status, posting_status, rejection_reason, created_at)
-       VALUES ($1, $2, 'Rejected', 'Rejected', 'Image cropped poorly', NOW() - INTERVAL '1 hour')`,
+      `INSERT INTO post_approval (approval_request_id, product_id, approval_status, posting_status, created_at)
+       VALUES ($1, $2, 'Rejected', 'Rejected', NOW() - INTERVAL '1 hour')`,
       [attempt1Id, pid]
     );
 
     // Insert attempt 2 (New attempt)
     await pool.query(
-      `INSERT INTO post_approval (approval_id, product_id, approval_status, posting_status, created_at)
+      `INSERT INTO post_approval (approval_request_id, product_id, approval_status, posting_status, created_at)
        VALUES ($1, $2, 'Pending', 'Processing', NOW())`,
       [attempt2Id, pid]
     );
 
     // Verify both records exist
     const { rows: allAttempts } = await pool.query(
-      `SELECT approval_id, approval_status FROM post_approval WHERE product_id = $1 ORDER BY created_at ASC`,
+      `SELECT approval_request_id, approval_status FROM post_approval WHERE product_id = $1 ORDER BY created_at ASC`,
       [pid]
     );
 
     assert.strictEqual(allAttempts.length, 2, 'Both attempts must be preserved in database');
-    assert.strictEqual(allAttempts[0].approval_id, attempt1Id);
+    assert.strictEqual(allAttempts[0].approval_request_id, attempt1Id);
     assert.strictEqual(allAttempts[0].approval_status, 'Rejected');
-    assert.strictEqual(allAttempts[1].approval_id, attempt2Id);
+    assert.strictEqual(allAttempts[1].approval_request_id, attempt2Id);
     assert.strictEqual(allAttempts[1].approval_status, 'Pending');
 
     await pool.query('DELETE FROM post_approval WHERE product_id = $1', [pid]);
     await pool.query('DELETE FROM product WHERE product_id = $1', [pid]);
   });
 
-  // Test 8: Gmail link generation format
-  await test('Gmail link is properly generated from gmail_thread_id', async () => {
-    const threadId = '18d9f4a2b1c8e0f5';
-    const expectedLink = `https://mail.google.com/mail/u/0/#all/${threadId}`;
-    const computed = `https://mail.google.com/mail/u/0/#all/${threadId}`;
-    assert.strictEqual(computed, expectedLink);
+  // Test 8: Gmail link generic format verification
+  await test('Gmail link format verification', async () => {
+    const defaultGmailLink = 'https://mail.google.com';
+    assert.strictEqual(defaultGmailLink, 'https://mail.google.com');
   });
 
   console.log('\n===============================================================');

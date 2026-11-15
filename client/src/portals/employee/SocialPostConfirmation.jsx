@@ -1,9 +1,12 @@
 /**
  * SocialPostConfirmation.jsx — Post Confirmation & Approval Tracking Page.
+ * Uses the simplified 9-column post_approval schema.
+ * Product information (Name, Price, Original Image) is retrieved dynamically from the product table.
+ *
  * Organized into 3 main sections:
  * 1. Pending Approval: Shows posts waiting for Gmail decision with direct "Open Gmail" link (NO dashboard Approve/Reject buttons)
- * 2. Published Posts: Shows successfully published Instagram posts with Instagram Post ID
- * 3. Rejected Posts: Shows historical rejected attempts with rejection reasons
+ * 2. Published Posts: Shows successfully published Instagram posts with published_at timestamp
+ * 3. Rejected Posts: Shows historical rejected attempts
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,6 +23,7 @@ const STATUS_BADGES = {
 const POSTING_STATUS_BADGES = {
   'Awaiting Approval': { bg: 'rgba(168, 85, 247, 0.15)', text: '#a855f7' },
   Processing: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3b82f6' },
+  Publishing: { bg: 'rgba(59, 130, 246, 0.2)', text: '#2563eb' },
   Published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
   Posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e' },
   Rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444' },
@@ -70,14 +74,15 @@ const SocialPostConfirmation = () => {
     (item) =>
       item.approvalStatus === 'Pending' ||
       item.postingStatus === 'Awaiting Approval' ||
-      item.postingStatus === 'Processing'
+      item.postingStatus === 'Processing' ||
+      item.postingStatus === 'Publishing'
   );
 
   const publishedPosts = approvals.filter(
     (item) =>
       item.postingStatus === 'Published' ||
       item.postingStatus === 'Posted' ||
-      (item.approvalStatus === 'Approved' && item.instagramPostId)
+      item.approvalStatus === 'Approved'
   );
 
   const rejectedPosts = approvals.filter(
@@ -95,12 +100,6 @@ const SocialPostConfirmation = () => {
 
   const displayedItems = getDisplayedItems();
 
-  const getGmailUrl = (item) => {
-    if (item.gmailLink) return item.gmailLink;
-    if (item.gmailThreadId) return `https://mail.google.com/mail/u/0/#all/${item.gmailThreadId}`;
-    return 'https://mail.google.com';
-  };
-
   return (
     <div>
       {/* Header */}
@@ -108,7 +107,7 @@ const SocialPostConfirmation = () => {
         <div>
           <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Post Confirmation & History</h2>
           <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Track automated Instagram posts, inspect AI-generated captions, and open Gmail approval emails.
+            Review AI-generated Instagram posts, captions, and publishing status. Decisions occur through Gmail.
           </p>
         </div>
 
@@ -168,7 +167,7 @@ const SocialPostConfirmation = () => {
           </h3>
           <p style={{ margin: 0, fontSize: '0.9rem' }}>
             {activeTab === 'Pending'
-              ? 'When you trigger a post from the Products page, the approval request and Gmail notification link will appear here.'
+              ? 'When you trigger a post from the Products page, the approval request will appear here while waiting for Gmail decision.'
               : 'Posts approved via Gmail will be published to Instagram and archived here.'}
           </p>
         </div>
@@ -181,7 +180,8 @@ const SocialPostConfirmation = () => {
             const isPending =
               item.approvalStatus === 'Pending' ||
               item.postingStatus === 'Awaiting Approval' ||
-              item.postingStatus === 'Processing';
+              item.postingStatus === 'Processing' ||
+              item.postingStatus === 'Publishing';
             const isPublished =
               item.postingStatus === 'Published' ||
               item.postingStatus === 'Posted' ||
@@ -191,12 +191,11 @@ const SocialPostConfirmation = () => {
             const statusConfig = STATUS_BADGES[item.approvalStatus] || STATUS_BADGES.Pending;
             const postingConfig =
               POSTING_STATUS_BADGES[item.postingStatus] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af' };
-            const previewImage = item.generatedImageUrl || item.productImageUrl;
-            const gmailUrl = getGmailUrl(item);
+            const previewImage = item.enhancedImageUrl || item.productImageUrl;
 
             return (
               <div
-                key={item.approvalId}
+                key={item.approvalRequestId}
                 className="card bg-bg-secondary"
                 style={{
                   display: 'flex',
@@ -226,8 +225,8 @@ const SocialPostConfirmation = () => {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ fontSize: '1.1rem' }}>📸</span>
-                    <strong style={{ fontSize: '0.9rem' }}>{item.platform || 'Instagram'} Post</strong>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>• {item.approvalId}</span>
+                    <strong style={{ fontSize: '0.9rem' }}>Instagram Post</strong>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>• {item.approvalRequestId}</span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -298,7 +297,7 @@ const SocialPostConfirmation = () => {
                           fontWeight: 600,
                         }}
                       >
-                        {item.generatedImageUrl ? 'Enhanced' : 'Original'}
+                        {item.enhancedImageUrl ? 'Enhanced' : 'Original'}
                       </div>
                     </div>
 
@@ -309,7 +308,7 @@ const SocialPostConfirmation = () => {
                     </div>
                   </div>
 
-                  {/* Right: Details & Caption */}
+                  {/* Right: Details & Caption (Retrieved dynamically through product_id join) */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.98rem', marginBottom: '0.25rem' }}>
                       {item.productName}
@@ -345,8 +344,9 @@ const SocialPostConfirmation = () => {
 
                     {/* Metadata */}
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Attempt ID: {item.approvalId}</span>
+                      <span>Attempt ID: {item.approvalRequestId}</span>
                       <span>
+                        Created:{' '}
                         {item.createdAt
                           ? new Date(item.createdAt).toLocaleDateString('en-GB', {
                               day: '2-digit',
@@ -358,32 +358,23 @@ const SocialPostConfirmation = () => {
                       </span>
                     </div>
 
-                    {/* Instagram Publication Notice */}
-                    {item.instagramPostId && (
+                    {/* Publication Timestamp */}
+                    {item.publishedAt && (
                       <div style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: '#22c55e', fontWeight: 600 }}>
-                        ✓ Published to Instagram (Post ID: <code>{item.instagramPostId}</code>)
-                      </div>
-                    )}
-
-                    {/* Rejection / Error Message */}
-                    {(item.rejectionReason || item.errorMessage) && (
-                      <div
-                        style={{
-                          marginTop: '0.5rem',
-                          fontSize: '0.78rem',
-                          color: 'var(--error-color)',
-                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                          padding: '0.4rem 0.6rem',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        ⚠️ {item.rejectionReason || item.errorMessage}
+                        ✓ Published at:{' '}
+                        {new Date(item.publishedAt).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Card Action Footer: Strict requirement - NO dashboard Approve/Reject buttons! */}
+                {/* Card Action Footer: NO dashboard Approve/Reject buttons */}
                 <div
                   style={{
                     padding: '0.85rem 1.25rem',
@@ -399,16 +390,11 @@ const SocialPostConfirmation = () => {
                     <>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         <span>Awaiting decision via Gmail</span>
-                        {item.gmailThreadId && (
-                          <span style={{ marginLeft: '0.4rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                            (Thread: {item.gmailThreadId.slice(0, 12)}...)
-                          </span>
-                        )}
                       </div>
 
-                      {/* Direct Gmail Deep Link */}
+                      {/* Open Gmail button */}
                       <a
-                        href={gmailUrl}
+                        href="https://mail.google.com"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn"

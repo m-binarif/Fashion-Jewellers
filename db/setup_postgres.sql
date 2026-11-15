@@ -340,33 +340,21 @@ CREATE SEQUENCE IF NOT EXISTS review_id_seq START WITH 16;
 ALTER TABLE review ALTER COLUMN review_id SET DEFAULT ('REV' || LPAD(nextval('review_id_seq')::text, 3, '0'));
 
 CREATE TABLE IF NOT EXISTS post_approval (
-    approval_id            VARCHAR(30)  NOT NULL,
-    product_id             VARCHAR(10)  NOT NULL,
-    employee_id            VARCHAR(10),
-    workflow_execution_id  VARCHAR(100),
-    resume_url             TEXT,
+    approval_request_id    VARCHAR(50)   NOT NULL,
+    product_id             VARCHAR(10)   NOT NULL,
     generated_caption      TEXT,
-    generated_image_url    TEXT,
-    platform               VARCHAR(50)  NOT NULL DEFAULT 'Instagram',
-    approval_status        VARCHAR(30)  NOT NULL DEFAULT 'Pending',
-    posting_status         VARCHAR(30)  NOT NULL DEFAULT 'Awaiting Approval',
-    instagram_post_id      VARCHAR(100),
-    error_message          TEXT,
-    decision_token         VARCHAR(100) UNIQUE,
-    decided_at             TIMESTAMP,
-    gmail_thread_id        VARCHAR(100),
-    gmail_message_id       VARCHAR(100),
-    gmail_link             TEXT,
-    email_sent_at          TIMESTAMP,
-    rejection_reason       TEXT,
-    created_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at             TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (approval_id),
-    CONSTRAINT fk_approval_product  FOREIGN KEY (product_id)  REFERENCES product (product_id)  ON DELETE CASCADE,
-    CONSTRAINT fk_approval_employee FOREIGN KEY (employee_id) REFERENCES employee (employee_id) ON DELETE SET NULL
+    enhanced_image_url     TEXT,
+    approval_status        VARCHAR(30)   NOT NULL DEFAULT 'Pending',
+    posting_status         VARCHAR(30)   NOT NULL DEFAULT 'Awaiting Approval',
+    created_at             TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at           TIMESTAMP,
+    PRIMARY KEY (approval_request_id),
+    CONSTRAINT fk_approval_product FOREIGN KEY (product_id) REFERENCES product (product_id) ON DELETE CASCADE
 );
 
-CREATE SEQUENCE IF NOT EXISTS post_approval_id_seq START WITH 1;
-ALTER TABLE post_approval ALTER COLUMN approval_id SET DEFAULT ('APV' || LPAD(nextval('post_approval_id_seq')::text, 4, '0'));
+CREATE INDEX IF NOT EXISTS idx_post_approval_product ON post_approval(product_id);
+CREATE INDEX IF NOT EXISTS idx_post_approval_status ON post_approval(approval_status);
+CREATE INDEX IF NOT EXISTS idx_post_approval_created_at ON post_approval(created_at DESC);
 
 

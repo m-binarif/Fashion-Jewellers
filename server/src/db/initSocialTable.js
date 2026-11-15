@@ -1,5 +1,5 @@
 /**
- * initSocialTable.js — Ensures the post_approval table exists in PostgreSQL.
+ * initSocialTable.js — Ensures the post_approval table exists with the exact 9 essential columns.
  * Automatically runs on server startup so no manual DB migration is required.
  */
 
@@ -8,34 +8,28 @@ const pool = require('./pool');
 async function initSocialTable() {
   const query = `
     CREATE TABLE IF NOT EXISTS post_approval (
-      approval_id            VARCHAR(30) PRIMARY KEY,
+      approval_request_id    VARCHAR(50) PRIMARY KEY,
       product_id             VARCHAR(10) NOT NULL REFERENCES product(product_id) ON DELETE CASCADE,
-      employee_id            VARCHAR(10) REFERENCES employee(employee_id) ON DELETE SET NULL,
-      workflow_execution_id  VARCHAR(100),
-      resume_url             TEXT,
       generated_caption      TEXT,
-      generated_image_url    TEXT,
-      platform               VARCHAR(50) NOT NULL DEFAULT 'Instagram',
+      enhanced_image_url     TEXT,
       approval_status        VARCHAR(30) NOT NULL DEFAULT 'Pending',
       posting_status         VARCHAR(30) NOT NULL DEFAULT 'Awaiting Approval',
-      instagram_post_id      VARCHAR(100),
-      error_message          TEXT,
-      decision_token         VARCHAR(100) UNIQUE,
-      decided_at             TIMESTAMP,
-      gmail_thread_id        VARCHAR(100),
-      gmail_message_id       VARCHAR(100),
-      gmail_link             TEXT,
-      email_sent_at          TIMESTAMP,
-      rejection_reason       TEXT,
       created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      published_at           TIMESTAMP NULL
     );
 
-    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_thread_id VARCHAR(100);
-    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_message_id VARCHAR(100);
-    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS gmail_link TEXT;
-    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP;
-    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'post_approval' AND column_name = 'approval_id') THEN
+        ALTER TABLE post_approval RENAME COLUMN approval_id TO approval_request_id;
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'post_approval' AND column_name = 'generated_image_url') THEN
+        ALTER TABLE post_approval RENAME COLUMN generated_image_url TO enhanced_image_url;
+      END IF;
+    END $$;
+
+    ALTER TABLE post_approval ADD COLUMN IF NOT EXISTS published_at TIMESTAMP NULL;
 
     CREATE INDEX IF NOT EXISTS idx_post_approval_product ON post_approval(product_id);
     CREATE INDEX IF NOT EXISTS idx_post_approval_status ON post_approval(approval_status);
@@ -44,7 +38,7 @@ async function initSocialTable() {
 
   try {
     await pool.query(query);
-    console.log('Post approval table verified in database.');
+    console.log('Post approval table verified in database (9 essential columns).');
   } catch (err) {
     console.warn('Note: post_approval table verification skipped or failed:', err.message);
   }
