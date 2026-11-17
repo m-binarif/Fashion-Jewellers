@@ -69,6 +69,9 @@ function App() {
                   <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminDashboard />} />
                     <Route path="products" element={<AdminProducts />} />
+                    <Route path="products-posting" element={<SocialProducts />} />
+                    <Route path="post-confirmation" element={<SocialPostConfirmation />} />
+                    <Route path="social-products" element={<Navigate to="/admin/products-posting" replace />} />
                     <Route path="orders" element={<AdminOrders />} />
                     <Route path="customers" element={<AdminCustomers />} />
                     <Route path="suppliers" element={<AdminSuppliers />} />

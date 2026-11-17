@@ -8,12 +8,14 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
 const ADMIN_NAV_ITEMS = [
-  { path: '/admin',           label: 'Dashboard',            icon: '▦', exact: true },
-  { path: '/admin/products',  label: 'Products & Inventory', icon: '💎' },
-  { path: '/admin/orders',    label: 'Order Management',     icon: '📦' },
-  { path: '/admin/customers', label: 'Customers',            icon: '👥' },
-  { path: '/admin/suppliers', label: 'Supplier Data',        icon: '🏭' },
-  { path: '/admin/employees', label: 'Employees',            icon: '💼' },
+  { path: '/admin',                   label: 'Dashboard',            icon: '▦', exact: true },
+  { path: '/admin/products',          label: 'Products & Inventory', icon: '💎' },
+  { path: '/admin/products-posting',  label: 'Products Posting',     icon: '📸' },
+  { path: '/admin/post-confirmation', label: 'Post Confirmation',    icon: '📱' },
+  { path: '/admin/orders',            label: 'Order Management',     icon: '📦' },
+  { path: '/admin/customers',         label: 'Customers',            icon: '👥' },
+  { path: '/admin/suppliers',         label: 'Supplier Data',        icon: '🏭' },
+  { path: '/admin/employees',         label: 'Employees',            icon: '💼' },
 ];
 
 const AdminLayout = () => {
@@ -29,7 +31,9 @@ const AdminLayout = () => {
   }, []);
 
   const currentNav = ADMIN_NAV_ITEMS.find((item) =>
-    item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
+    item.exact
+      ? location.pathname === item.path
+      : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
   );
   const pageTitle = currentNav?.label || 'Admin Portal';
 
@@ -142,7 +146,7 @@ const AdminLayout = () => {
           {ADMIN_NAV_ITEMS.map((item) => {
             const isActive = item.exact
               ? location.pathname === item.path
-              : location.pathname.startsWith(item.path);
+              : location.pathname === item.path || location.pathname.startsWith(item.path + '/');
 
             return (
               <Link

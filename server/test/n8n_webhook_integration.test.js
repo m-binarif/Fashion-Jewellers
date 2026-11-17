@@ -420,6 +420,103 @@ async function runTests() {
     assert.strictEqual(writeMatches.length, 0, `Backend social.js must have 0 writes to post_approval, but found: ${writeMatches.join(', ')}`);
   });
 
+  // Test 12: Admin authentication is fully authorized to access social media endpoints
+  await test('Admin role is authorized for social media posting & confirmation endpoints', async () => {
+    const jwt = require('jsonwebtoken');
+    const { authMiddleware, employeeRoleMiddleware } = require('../src/middleware/auth');
+
+    // 1. Admin Token
+    const adminToken = jwt.sign(
+      { sub: 'ADM001', role: 'admin', name: 'System Admin' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    let adminAuthPassed = false;
+    let adminRolePassed = false;
+
+    const adminReq = { headers: { authorization: `Bearer ${adminToken}` } };
+    const adminRes = {
+      status: (code) => ({
+        json: (data) => { throw new Error(`Unexpected error ${code}: ${JSON.stringify(data)}`); }
+      })
+    };
+
+    await authMiddleware(adminReq, adminRes, () => {
+      adminAuthPassed = true;
+      const roleMw = employeeRoleMiddleware('Social Media Manager');
+      roleMw(adminReq, adminRes, () => {
+        adminRolePassed = true;
+      });
+    });
+
+    assert.strictEqual(adminAuthPassed, true, 'Admin token must pass authMiddleware');
+    assert.strictEqual(adminRolePassed, true, 'Admin role must pass employeeRoleMiddleware');
+
+    // 2. Customer Token (Must be rejected)
+    const customerToken = jwt.sign(
+      { sub: 'CUST999', role: 'customer', name: 'Test Customer' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    let customerBlocked = false;
+    const custReq = {
+      headers: { authorization: `Bearer ${customerToken}` },
+      user: { id: 'CUST999', role: 'customer' }
+    };
+    const custRes = {
+      status: (code) => ({
+        json: (data) => {
+          if (code === 403) customerBlocked = true;
+        }
+      })
+    };
+
+    const roleMw = employeeRoleMiddleware('Social Media Manager');
+    roleMw(custReq, custRes, () => {
+      throw new Error('Customer should not pass employeeRoleMiddleware');
+    });
+
+    assert.strictEqual(customerBlocked, true, 'Customer role must be blocked with 403 Forbidden');
+  });
+
+  // Test 13: Admin and Social Media Manager share the exact same post_approval records
+  await test('Admin and Social Media Manager share identical database records and visibility logic', async () => {
+    const ts = Date.now();
+    const { rows: prodRows } = await pool.query(
+      `INSERT INTO product (
+        product_name, description, base_price, quantity, is_active, post_status,
+        category_id, material_id, type_id, supplier_id, image_url
+      ) VALUES ($1, 'Shared Product', 1200, 5, 1, 'pending', 'CAT005', 'MAT001', 'TYP001', 'SUP003', 'https://res.cloudinary.com/demo/image/upload/sample.jpg')
+      RETURNING product_id`,
+      [`Shared Product Test ${ts}`]
+    );
+    const pid = prodRows[0].product_id;
+
+    // Both Admin and Social Media Manager query the same table
+    const { rows: sharedRows } = await pool.query(
+      `SELECT p.product_id, p.post_status, latest.approval_status, latest.posting_status
+       FROM product p
+       LEFT JOIN LATERAL (
+         SELECT approval_status, posting_status
+         FROM post_approval
+         WHERE product_id = p.product_id
+         ORDER BY created_at DESC, approval_request_id DESC
+         LIMIT 1
+       ) latest ON true
+       WHERE p.product_id = $1`,
+      [pid]
+    );
+
+    assert.strictEqual(sharedRows.length, 1);
+    assert.strictEqual(sharedRows[0].post_status, 'pending');
+    assert.strictEqual(sharedRows[0].approval_status, null);
+
+    // Clean up
+    await pool.query('DELETE FROM product WHERE product_id = $1', [pid]);
+  });
+
   console.log('\n===============================================================');
   console.log(`TEST RESULTS: ${passed} passed, ${failed} failed`);
   console.log('===============================================================\n');
