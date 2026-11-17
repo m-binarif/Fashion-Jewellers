@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "node test/cloudinary_integration.test.js && node test/n8n_webhook_integration.test.js",
+    "test": "node test/cloudinary_integration.test.js && node test/n8n_webhook_integration.test.js && node test/sales_report_integration.test.js",
     "migrate:cleanup": "node src/scripts/runMigration.js",
     "migrate:images": "node src/scripts/migrateImagesToCloudinary.js"
   },

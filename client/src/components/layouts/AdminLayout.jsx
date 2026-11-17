@@ -12,6 +12,7 @@ const ADMIN_NAV_ITEMS = [
   { path: '/admin/products',          label: 'Products & Inventory', icon: '💎' },
   { path: '/admin/products-posting',  label: 'Products Posting',     icon: '📸' },
   { path: '/admin/post-confirmation', label: 'Post Confirmation',    icon: '📱' },
+  { path: '/admin/sales-report',      label: 'Sales Report',         icon: '📊' },
   { path: '/admin/orders',            label: 'Order Management',     icon: '📦' },
   { path: '/admin/customers',         label: 'Customers',            icon: '👥' },
   { path: '/admin/suppliers',         label: 'Supplier Data',        icon: '🏭' },

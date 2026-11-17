@@ -10,6 +10,7 @@ import EmployeeDashboardLayout from './components/layouts/EmployeeDashboardLayou
 import EmployeeDashboardView from './portals/employee/EmployeeDashboardView';
 import SocialProducts from './portals/employee/SocialProducts';
 import SocialPostConfirmation from './portals/employee/SocialPostConfirmation';
+import SalesReport from './portals/common/SalesReport';
 import { useEmployeeAuth } from './context/EmployeeAuthContext';
 import ScrollToTop from './components/common/ScrollToTop';
 
@@ -72,6 +73,7 @@ function App() {
                     <Route path="products-posting" element={<SocialProducts />} />
                     <Route path="post-confirmation" element={<SocialPostConfirmation />} />
                     <Route path="social-products" element={<Navigate to="/admin/products-posting" replace />} />
+                    <Route path="sales-report" element={<SalesReport />} />
                     <Route path="orders" element={<AdminOrders />} />
                     <Route path="customers" element={<AdminCustomers />} />
                     <Route path="suppliers" element={<AdminSuppliers />} />
@@ -84,6 +86,7 @@ function App() {
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<EmployeeDashboardView />} />
                     <Route path="products" element={<EmployeeProductsRoute />} />
+                    <Route path="sales-report" element={<SalesReport />} />
                     <Route path="post-confirmation" element={<SocialPostConfirmation />} />
                     <Route path="orders" element={<AdminOrders />} />
                     <Route path="suppliers" element={<AdminSuppliers />} />

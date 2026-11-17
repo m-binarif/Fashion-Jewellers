@@ -10,7 +10,7 @@ import { useEmployeeAuth } from '../../context/EmployeeAuthContext';
 
 // Permitted navigation items for each employee role
 const ROLE_NAV_PERMISSIONS = {
-  'Inventory Manager':    ['products', 'suppliers'],
+  'Inventory Manager':    ['products', 'sales-report', 'suppliers'],
   'Sales Executive':      ['orders'],
   'Social Media Manager': ['products', 'post-confirmation'],
 };
@@ -66,6 +66,12 @@ const EmployeeDashboardLayout = () => {
       path: `/employee/${username}/products`,
       label: isSocialMedia ? 'Products' : 'Products & Inventory',
       icon: '💎',
+    },
+    {
+      key: 'sales-report',
+      path: `/employee/${username}/sales-report`,
+      label: 'Sales Report',
+      icon: '📊',
     },
     {
       key: 'post-confirmation',

@@ -37,6 +37,8 @@ app.use('/api/v1/sync', require('./routes/sync'));
 app.use('/api/v1/social', require('./routes/social'));
 app.use('/api/v1/admin/social', require('./routes/social'));
 app.use('/api/social-media', require('./routes/social'));
+app.use('/api/v1/sales-report', require('./routes/salesReport'));
+app.use('/api/v1/admin/sales-report', require('./routes/salesReport'));
 
 // Global error handler
 app.use((err, req, res, next) => {
