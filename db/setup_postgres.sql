@@ -90,10 +90,12 @@ CREATE TABLE product (
     base_price        DECIMAL(10,2) NOT NULL,
     quantity          INT           NOT NULL DEFAULT 0,
     is_active         SMALLINT      NOT NULL DEFAULT 1,
+    post_status       VARCHAR(50)   NOT NULL DEFAULT 'pending',
     last_stock_update TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     origin            VARCHAR(50),
     weight            VARCHAR(20),
     image_url         TEXT,
+    public_image_id   VARCHAR(255),
     category_id       VARCHAR(10)   NOT NULL,
     material_id       VARCHAR(10)   NOT NULL,
     type_id           VARCHAR(10)   NOT NULL,
@@ -226,7 +228,7 @@ INSERT INTO type (type_id, type_name) VALUES
   ('TYP001','Wedding'),('TYP002','Party'),('TYP003','Casual'),('TYP004','Luxury');
 
 INSERT INTO role_type (role_id, role_name, basic_salary) VALUES
-  ('ROL001','Store Manager',80000),('ROL002','Sales Executive',60000),('ROL003','Warehouse Manager',40000);
+  ('ROL001','Inventory Manager',90000),('ROL002','Sales Executive',60000),('ROL003','Social Media Manager',90000);
 
 INSERT INTO employee (employee_id,emp_name,email,phone_number,hire_date,cnic,username,password,increment,role_id,is_active) VALUES
   ('EMP001','Mohsin Raza','mohsin@jewellery.com','923218999514','2023-01-01','3520112345671','ahmad','$2b$12$ArJwVJYWmQsFUOYHzgqdmOyanWoyDy5.hj.fvg34SEzwC44F8nQnS',5000,'ROL001',1),
@@ -336,4 +338,23 @@ ALTER TABLE shipment ALTER COLUMN shipment_id SET DEFAULT ('SHP' || LPAD(nextval
 
 CREATE SEQUENCE IF NOT EXISTS review_id_seq START WITH 16;
 ALTER TABLE review ALTER COLUMN review_id SET DEFAULT ('REV' || LPAD(nextval('review_id_seq')::text, 3, '0'));
+
+CREATE TABLE IF NOT EXISTS post_approval (
+    approval_request_id    VARCHAR(50)   NOT NULL,
+    product_id             VARCHAR(10)   NOT NULL,
+    generated_caption      TEXT,
+    enhanced_image_url     TEXT,
+    approval_status        VARCHAR(30)   NOT NULL DEFAULT 'pending',
+    posting_status         VARCHAR(30)   NOT NULL DEFAULT 'processing',
+    created_at             TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at           TIMESTAMP,
+    PRIMARY KEY (approval_request_id),
+    CONSTRAINT fk_approval_product FOREIGN KEY (product_id) REFERENCES product (product_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_approval_product ON post_approval(product_id);
+CREATE INDEX IF NOT EXISTS idx_post_approval_status ON post_approval(approval_status);
+CREATE INDEX IF NOT EXISTS idx_post_approval_created_at ON post_approval(created_at DESC);
+
 

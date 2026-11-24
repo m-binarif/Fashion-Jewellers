@@ -17,12 +17,33 @@ export const getAssetUrl = (path) => {
   return `${ASSET_BASE}${path}`;
 };
 
-// Request interceptor to attach JWT token
+// Request interceptor to attach JWT token based on active portal context
 api.interceptors.request.use(
   (config) => {
-    const isAdminPortal = window.location.pathname.startsWith('/admin');
-    const tokenKey = isAdminPortal ? 'admin_token' : 'token';
-    const token = localStorage.getItem(tokenKey);
+    const pathname = window.location.pathname;
+    let token = null;
+
+    if (pathname.startsWith('/admin')) {
+      // Admin Portal: Strictly use admin_token from localStorage
+      token = localStorage.getItem('admin_token');
+    } else if (pathname.startsWith('/employee')) {
+      // Employee Portal: Tab-isolated token from sessionStorage
+      token = sessionStorage.getItem('employee_token');
+
+      // If missing from generic session key, check route username
+      if (!token) {
+        const match = pathname.match(/^\/employee\/([^/]+)/);
+        const username = match ? match[1] : null;
+        if (username && username !== 'login') {
+          token = sessionStorage.getItem(`employee_token_${username}`) ||
+                  localStorage.getItem(`employee_token_${username}`);
+        }
+      }
+    } else {
+      // Customer / Public portal
+      token = localStorage.getItem('token');
+    }
+
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -37,15 +58,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If the token is invalid or expired, we might want to trigger a logout
-    // We can do this safely by checking the response status
     if (error.response && error.response.status === 401) {
-      const isAdminPortal = window.location.pathname.startsWith('/admin');
-      const tokenKey = isAdminPortal ? 'admin_token' : 'token';
-      // Clear token
-      localStorage.removeItem(tokenKey);
-      // Dispatch a custom event to tell the app to log out (AuthContext listens to this)
-      window.dispatchEvent(new Event('auth:unauthorized'));
+      const pathname = window.location.pathname;
+
+      if (pathname.startsWith('/admin')) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+        window.dispatchEvent(new Event('admin:unauthorized'));
+      } else if (pathname.startsWith('/employee')) {
+        const match = pathname.match(/^\/employee\/([^/]+)/);
+        const username = match ? match[1] : null;
+        sessionStorage.removeItem('employee_token');
+        sessionStorage.removeItem('employee_user');
+        if (username && username !== 'login') {
+          sessionStorage.removeItem(`employee_token_${username}`);
+          localStorage.removeItem(`employee_token_${username}`);
+        }
+        window.dispatchEvent(new Event('employee:unauthorized'));
+      } else {
+        localStorage.removeItem('token');
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      }
     }
     return Promise.reject(error);
   }

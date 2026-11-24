@@ -2,6 +2,7 @@ const express = require('express');
 const { OrderService } = require('../services/orderService');
 const { InvoiceService } = require('../services/invoiceService');
 const { authMiddleware, roleMiddleware } = require('../middleware/auth');
+const { broadcast } = require('../utils/eventHub');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -15,6 +16,7 @@ router.post('/', roleMiddleware('customer'), async (req, res, next) => {
       return res.status(400).json({ success: false, data: null, message: 'shippingInfo and paymentMethodId are required' });
     }
     const order = await OrderService.checkout(req.user.id, shippingInfo, paymentMethodId);
+    broadcast('orders:changed', { action: 'created', orderId: order.order_id || order.id || order.orderId });
     res.status(201).json({ success: true, data: order, message: 'Checkout successful' });
   } catch (err) {
     next(err);
@@ -59,13 +61,14 @@ router.get('/:id/invoice', async (req, res, next) => {
 
 // PATCH /api/v1/orders/:id/status
 // Administrative route to update the status of an order (e.g. Processing, Shipped, Delivered)
-router.patch('/:id/status', roleMiddleware('admin'), async (req, res, next) => {
+router.patch('/:id/status', roleMiddleware('admin', 'employee'), async (req, res, next) => {
   try {
     const { status } = req.body;
     if (!status) {
       return res.status(400).json({ success: false, data: null, message: 'Status is required' });
     }
     const order = await OrderService.updateStatus(req.params.id, status);
+    broadcast('orders:changed', { action: 'updated', orderId: req.params.id, status });
     res.json({ success: true, data: order, message: 'Order status updated successfully' });
   } catch (err) {
     next(err);

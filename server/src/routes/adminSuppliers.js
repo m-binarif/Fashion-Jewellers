@@ -1,6 +1,7 @@
 const express = require('express');
 const { SupplierService } = require('../services/supplierService');
 const { authMiddleware, roleMiddleware } = require('../middleware/auth');
+const { broadcast } = require('../utils/eventHub');
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const supplier = await SupplierService.createSupplier(req.body);
+    broadcast('suppliers:changed', { action: 'created', supplier });
     res.status(201).json({ success: true, data: supplier, message: 'Supplier created successfully' });
   } catch (err) {
     next(err);
@@ -35,6 +37,7 @@ router.post('/', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     await SupplierService.deleteSupplier(req.params.id);
+    broadcast('suppliers:changed', { action: 'deleted', id: req.params.id });
     res.json({ success: true, data: null, message: 'Supplier deleted successfully' });
   } catch (err) {
     next(err);
@@ -46,6 +49,7 @@ router.delete('/:id', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const supplier = await SupplierService.updateSupplier(req.params.id, req.body);
+    broadcast('suppliers:changed', { action: 'updated', supplier });
     res.json({ success: true, data: supplier, message: 'Supplier updated successfully' });
   } catch (err) {
     next(err);
@@ -58,6 +62,7 @@ router.patch('/:id/status', async (req, res, next) => {
   try {
     const { isActive } = req.body;
     await SupplierService.updateStatus(req.params.id, isActive);
+    broadcast('suppliers:changed', { action: 'status_changed', id: req.params.id, isActive });
     res.json({ success: true, data: null, message: 'Supplier status updated successfully' });
   } catch (err) {
     next(err);

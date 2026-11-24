@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { useRealtimeSync } from '../../services/realtime';
 
 const STATUS_COLORS = {
   Pending:    { bg: 'rgba(245,158,11,0.12)',  text: '#f59e0b' },
@@ -54,6 +55,11 @@ const AdminOrders = () => {
   }, [page, search, statusFilter]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  // Real-time synchronization: Auto-refresh when any employee or customer updates an order
+  useRealtimeSync('orders:changed', useCallback(() => {
+    fetchOrders();
+  }, [fetchOrders]));
 
   const handleStatusChange = async (orderId, newStatus) => {
     setUpdatingId(orderId);
@@ -157,7 +163,7 @@ const AdminOrders = () => {
                             onClick={(e) => {
                               e.stopPropagation();
                               const oid = order.id || order.order_id;
-                              const token = localStorage.getItem('admin_token');
+                              const token = sessionStorage.getItem('employee_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
                               const url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/orders/${oid}/invoice?token=${token}`;
                               window.open(url, '_blank');
                             }}

@@ -269,8 +269,8 @@ ul {
 /* Responsive sidebar helpers */
 .hidden     { display: none !important; }
 @media (min-width: 768px) {
-  .md\\:flex  { display: flex !important; }
-  .md\\:hidden { display: none !important; }
+  .md\:flex  { display: flex !important; }
+  .md\:hidden { display: none !important; }
 }
 
 /* Dashboard table row hover */
@@ -364,8 +364,6 @@ ul {
   .lg\:w-96 { width: 28rem; }
 }
 
-.md\:col-span-6 { grid-column: span 6 / span 6; }
-.md\:col-span-2 { grid-column: span 2 / span 2; }
 .col-span-6 { grid-column: span 6 / span 6; }
 .col-span-2 { grid-column: span 2 / span 2; }
 .grid-cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }

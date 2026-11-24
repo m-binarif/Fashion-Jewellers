@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAdminAuth } from '../../context/AdminAuthContext';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -8,7 +8,7 @@ const AdminLogin = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login } = useAdminAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,7 +23,7 @@ const AdminLogin = () => {
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password, 'admin');
+    const result = await login(email, password);
     
     if (result.success) {
       navigate('/admin');

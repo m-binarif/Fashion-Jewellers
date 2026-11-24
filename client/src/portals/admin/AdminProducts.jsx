@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api, { getAssetUrl } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { useRealtimeSync } from '../../services/realtime';
 
 const AdminProducts = () => {
   const [products, setProducts] = useState([]);
@@ -45,6 +46,11 @@ const AdminProducts = () => {
     fetchData();
   }, []);
 
+  // Real-time synchronization: Auto-refresh when any employee adds or updates products
+  useRealtimeSync('products:changed', useCallback(() => {
+    fetchData();
+  }, []));
+
   const openAddModal = () => {
     setModalMode('add');
     setFormData({
@@ -71,7 +77,8 @@ const AdminProducts = () => {
       typeId: product.typeId || 'TYP001',
       origin: product.origin || '',
       weight: product.weight || '',
-      supplierId: product.supplierId || (suppliers.length > 0 ? suppliers[0].id : '')
+      supplierId: product.supplierId || (suppliers.length > 0 ? suppliers[0].id : ''),
+      imageUrl: product.imageUrl || ''
     });
     setSelectedImage(null);
     setIsModalOpen(true);
@@ -103,24 +110,50 @@ const AdminProducts = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const payload = {
-        ...formData,
-        price: Number(formData.price),
-        quantity: Number(formData.quantity)
-      };
+      let res;
+      if (selectedImage) {
+        const formDataPayload = new FormData();
+        Object.entries(formData).forEach(([key, val]) => {
+          if (val !== undefined && val !== null) {
+            formDataPayload.append(key, val);
+          }
+        });
+        formDataPayload.set('price', Number(formData.price));
+        formDataPayload.set('quantity', Number(formData.quantity));
+        formDataPayload.append('image', selectedImage);
 
-      if (modalMode === 'add') {
-        const res = await api.post('/products', payload);
-        if (res.data.success) {
-          const newProduct = res.data.data;
-          setProducts([newProduct, ...products]);
-          showSuccess('Product added successfully!');
+        const config = {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        };
+
+        if (modalMode === 'add') {
+          res = await api.post('/products', formDataPayload, config);
+        } else {
+          res = await api.patch(`/products/${formData.id}`, formDataPayload, config);
         }
       } else {
-        const res = await api.patch(`/products/${formData.id}`, payload);
-        if (res.data.success) {
-          const updatedProduct = res.data.data;
-          setProducts(products.map(p => p.id === formData.id ? updatedProduct : p));
+        const payload = {
+          ...formData,
+          price: Number(formData.price),
+          quantity: Number(formData.quantity)
+        };
+
+        if (modalMode === 'add') {
+          res = await api.post('/products', payload);
+        } else {
+          res = await api.patch(`/products/${formData.id}`, payload);
+        }
+      }
+
+      if (res.data.success) {
+        const productData = res.data.data;
+        if (modalMode === 'add') {
+          setProducts([productData, ...products]);
+          showSuccess('Product added successfully!');
+        } else {
+          setProducts(products.map(p => p.id === formData.id ? productData : p));
           showSuccess('Product updated successfully!');
         }
       }
@@ -275,11 +308,20 @@ const AdminProducts = () => {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Product Image</label>
-                <input type="file" accept="image/*" className="form-input" onChange={e => setSelectedImage(e.target.files[0])} style={{ width: '100%', padding: '0.4rem' }} />
+                {modalMode === 'edit' && formData.imageUrl && !selectedImage && (
+                  <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem', background: 'var(--surface-color, #f9f9f9)', borderRadius: '6px', border: '1px solid #eee' }}>
+                    <img src={getAssetUrl(formData.imageUrl)} alt="Current product" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      <div>Current image active</div>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Select a new file below to replace it on Cloudinary</div>
+                    </div>
+                  </div>
+                )}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="form-input" onChange={e => setSelectedImage(e.target.files[0])} style={{ width: '100%', padding: '0.4rem' }} />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                  Image will be automatically mapped to: <code>/uploads/&#123;product_name&#125;.png</code>
+                  Image will be uploaded to Cloudinary secure cloud storage (JPG, PNG, WEBP, max 5MB).
                 </p>
-                {selectedImage && <div style={{ fontSize: '0.8rem', color: 'var(--success-color)', marginTop: '0.2rem' }}>File selected: {selectedImage.name}</div>}
+                {selectedImage && <div style={{ fontSize: '0.8rem', color: 'var(--success-color)', marginTop: '0.2rem' }}>New image selected: {selectedImage.name}</div>}
               </div>
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
