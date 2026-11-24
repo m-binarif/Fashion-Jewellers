@@ -207,7 +207,7 @@ const SvgDonutChart = ({ items = [], totalLabel = 'Total', size = 180 }) => {
             cy={center}
             r={radius}
             fill="transparent"
-            stroke={slice.color || '#828E84'}
+            stroke={slice.color || '#D6B46A'}
             strokeWidth={strokeWidth}
             strokeDasharray={slice.strokeDasharray}
             strokeDashoffset={slice.strokeDashoffset}
@@ -221,7 +221,7 @@ const SvgDonutChart = ({ items = [], totalLabel = 'Total', size = 180 }) => {
         {items.map((item, idx) => (
           <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', fontSize: '0.82rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: item.color || '#828E84', flexShrink: 0 }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: item.color || '#D6B46A', flexShrink: 0 }} />
               <span style={{ color: 'var(--text-primary)' }}>{item.label}</span>
             </div>
             <strong style={{ color: 'var(--text-primary)' }}>
@@ -553,7 +553,7 @@ const SalesReport = () => {
 
   // Payment donut data
   const paymentDonutData = useMemo(() => {
-    const colors = ['#828E84', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+    const colors = ['#D6B46A', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
     return (report?.paymentAnalysis?.methods || []).map((m, idx) => ({
       label: m.paymentMethod,
       value: m.totalAmount,
@@ -1028,7 +1028,7 @@ const SalesReport = () => {
           </div>
 
           {/* 8. Profit Analysis Notice */}
-          <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', borderLeft: '4px solid #828E84' }}>
+          <div className="card" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem', backgroundColor: 'var(--bg-secondary)', borderLeft: '4px solid #D6B46A' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ fontSize: '1.2rem' }}>ℹ️</span>
               <div>

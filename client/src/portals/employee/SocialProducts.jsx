@@ -1,5 +1,5 @@
 /**
- * SocialProducts.jsx — Dedicated Products Page for Social Media Managers.
+ * SocialProducts.jsx — Dedicated Products Page for Social Media Managers & Admin.
  * Displays existing product records from PostgreSQL in read-only mode,
  * with conditional "Post" button based on exact business logic:
  *
@@ -21,30 +21,36 @@ import { useRealtimeSync } from '../../services/realtime';
 const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
 
 const POST_STATUS_COLORS = {
-  pending: { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', label: 'Pending' },
-  processing: { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6', label: 'Processing' },
-  'awaiting approval': { bg: 'rgba(168, 85, 247, 0.12)', text: '#a855f7', label: 'Awaiting Approval' },
-  approved: { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981', label: 'Approved' },
-  posted: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
-  published: { bg: 'rgba(34, 197, 94, 0.15)', text: '#22c55e', label: 'Published' },
-  rejected: { bg: 'rgba(239, 68, 68, 0.12)', text: '#ef4444', label: 'Rejected' },
-  failed: { bg: 'rgba(239, 68, 68, 0.15)', text: '#ef4444', label: 'Failed' },
+  pending: { bg: 'rgba(245, 158, 11, 0.15)', text: '#F59E0B', border: 'rgba(245, 158, 11, 0.3)', label: 'Pending' },
+  processing: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3B82F6', border: 'rgba(59, 130, 246, 0.3)', label: 'Processing' },
+  'awaiting approval': { bg: 'rgba(168, 85, 247, 0.15)', text: '#A855F7', border: 'rgba(168, 85, 247, 0.3)', label: 'Awaiting Approval' },
+  approved: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)', label: 'Approved' },
+  posted: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)', label: 'Published' },
+  published: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10B981', border: 'rgba(16, 185, 129, 0.3)', label: 'Published' },
+  rejected: { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.3)', label: 'Rejected' },
+  failed: { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444', border: 'rgba(239, 68, 68, 0.3)', label: 'Failed' },
 };
 
 const PostStatusBadge = ({ status, latestApprovalStatus }) => {
   const norm = normalizeStatus(status) || 'pending';
-  const c = POST_STATUS_COLORS[norm] || { bg: 'rgba(107, 114, 128, 0.12)', text: '#9ca3af', label: status || '—' };
+  const c = POST_STATUS_COLORS[norm] || {
+    bg: 'rgba(165, 168, 168, 0.12)',
+    text: '#A5A8A8',
+    border: 'rgba(165, 168, 168, 0.25)',
+    label: status || '—',
+  };
 
   return (
-    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.2rem' }}>
+    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '0.25rem' }}>
       <span
         style={{
           padding: '0.25rem 0.65rem',
-          borderRadius: '20px',
+          borderRadius: 20,
           fontSize: '0.75rem',
           fontWeight: 600,
           backgroundColor: c.bg,
           color: c.text,
+          border: `1px solid ${c.border}`,
           display: 'inline-flex',
           alignItems: 'center',
           gap: '0.35rem',
@@ -52,12 +58,12 @@ const PostStatusBadge = ({ status, latestApprovalStatus }) => {
           width: 'fit-content',
         }}
       >
-        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: c.text }} />
+        <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: c.text }} />
         {c.label}
       </span>
       {latestApprovalStatus && norm === 'pending' && (
         <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-          Latest Attempt: <strong>{POST_STATUS_COLORS[normalizeStatus(latestApprovalStatus)]?.label || latestApprovalStatus}</strong>
+          Latest: <strong style={{ color: 'var(--text-primary)' }}>{POST_STATUS_COLORS[normalizeStatus(latestApprovalStatus)]?.label || latestApprovalStatus}</strong>
         </span>
       )}
     </div>
@@ -74,7 +80,6 @@ const SocialProducts = () => {
 
   const fetchProducts = useCallback(async () => {
     try {
-      // Use dedicated social endpoint that returns products with latest approval status
       const res = await api.get('/social/products');
       if (res.data.success) {
         setProducts(res.data.data || []);
@@ -88,7 +93,6 @@ const SocialProducts = () => {
 
   useEffect(() => {
     fetchProducts();
-    // 5-second polling fallback in addition to SSE
     const interval = setInterval(fetchProducts, 5000);
     return () => clearInterval(interval);
   }, [fetchProducts]);
@@ -106,16 +110,6 @@ const SocialProducts = () => {
     fetchProducts();
   }, [fetchProducts]));
 
-  /**
-   * Post Button Visibility Logic:
-   * 1. Product's post_status must be 'pending' (never 'published')
-   * 2. AND (no approval record exists OR latest approval attempt status is 'rejected')
-   *
-   * Hidden when:
-   * - Product is published
-   * - Latest approval is pending / approved
-   * - Latest posting is processing / awaiting approval / publishing
-   */
   const canShowPostButton = (product) => {
     const postStatus = normalizeStatus(product.post_status) || 'pending';
     if (postStatus === 'published' || postStatus === 'posted') {
@@ -128,17 +122,14 @@ const SocialProducts = () => {
     const latestStatus = product.latestApprovalStatus ? normalizeStatus(product.latestApprovalStatus) : null;
     const latestPosting = product.latestPostingStatus ? normalizeStatus(product.latestPostingStatus) : null;
 
-    // If no record exists yet -> SHOW
     if (!latestStatus) {
       return true;
     }
 
-    // If latest attempt was rejected -> SHOW (allows retrying)
     if (latestStatus === 'rejected') {
       return true;
     }
 
-    // If latest attempt is pending, approved, processing, awaiting approval, publishing -> HIDE
     if (
       latestStatus === 'pending' ||
       latestStatus === 'approved' ||
@@ -162,8 +153,6 @@ const SocialProducts = () => {
 
     try {
       setTriggeringId(product.id);
-
-      // Call backend API: passes only productId in the route
       const res = await api.post(`/social/products/${product.id}/post`);
 
       if (res.data.success) {
@@ -171,7 +160,6 @@ const SocialProducts = () => {
           res.data.message ||
             'Post workflow triggered! n8n is retrieving product details from PostgreSQL to generate the post.'
         );
-        // Refresh product list immediately
         fetchProducts();
       }
     } catch (err) {
@@ -182,7 +170,6 @@ const SocialProducts = () => {
     }
   };
 
-  // Filter products by search and status
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase();
     const matchesSearch = !q || (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
@@ -192,32 +179,89 @@ const SocialProducts = () => {
   });
 
   return (
-    <div>
+    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          marginBottom: '1.75rem',
+          paddingBottom: '1.25rem',
+          borderBottom: '1px solid var(--border-color)',
+        }}
+      >
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>Products for Social Media</h2>
-          <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Review catalog items and initiate automated Instagram post generation for eligible products.
+          <span
+            style={{
+              fontSize: '0.72rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              fontWeight: 700,
+              color: 'var(--accent-primary)',
+              display: 'inline-block',
+              marginBottom: '0.35rem',
+            }}
+          >
+            Social Media &amp; Campaign Automation
+          </span>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '1.65rem',
+              fontFamily: 'var(--font-heading)',
+              color: 'var(--text-primary)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Products Posting
+          </h1>
+          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            Trigger autonomous n8n Instagram publishing with AI caption generation and email approvals
           </p>
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          className="form-input"
-          placeholder="Search by product ID or name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 320 }}
-        />
+      {/* Filter Toolbar */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '1rem',
+          marginBottom: '1.5rem',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ position: 'relative', flex: 1, minWidth: '240px', maxWidth: '380px' }}>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search by product ID or name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ paddingLeft: '2.4rem' }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              left: '0.85rem',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-secondary)',
+              fontSize: '0.9rem',
+            }}
+          >
+            🔍
+          </span>
+        </div>
+
         <select
           className="form-input"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ maxWidth: 200 }}
+          style={{ width: 'auto', minWidth: '180px' }}
         >
           <option value="">All Post Statuses</option>
           <option value="pending">Pending</option>
@@ -229,128 +273,177 @@ const SocialProducts = () => {
         </select>
       </div>
 
-      {/* Table Card */}
-      <div className="card bg-bg-secondary overflow-hidden">
+      {/* Products Table Card */}
+      <div
+        className="card"
+        style={{
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)',
+        }}
+      >
         {loading ? (
-          <div className="p-8 text-center" style={{ padding: '3rem' }}>
-            <div className="loader" style={{ margin: '0 auto' }} />
+          <div style={{ padding: '4rem', textAlign: 'center' }}>
+            <div className="loader" style={{ margin: '0 auto 1rem' }} />
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Loading product posting queue...</div>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', opacity: 0.5 }}>📸</div>
+            <div style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.35rem' }}>No products match filter criteria.</div>
+            <div style={{ fontSize: '0.85rem' }}>Try clearing the search or status filter.</div>
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)' }}>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product ID</th>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product Name</th>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Product Status</th>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Post Status</th>
-                <th className="p-4" style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.map((product) => {
-                const showButton = canShowPostButton(product);
-                const isTriggering = triggeringId === product.id;
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '0.95rem 1.25rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 600 }}>Product ID</th>
+                  <th style={{ padding: '0.95rem 1.25rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 600 }}>Jewellery Piece</th>
+                  <th style={{ padding: '0.95rem 1.25rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 600 }}>Catalog Status</th>
+                  <th style={{ padding: '0.95rem 1.25rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 600 }}>Instagram Status</th>
+                  <th style={{ padding: '0.95rem 1.25rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product) => {
+                  const showButton = canShowPostButton(product);
+                  const isTriggering = triggeringId === product.id;
 
-                return (
-                  <tr key={product.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    {/* 1. Product ID */}
-                    <td className="p-4 font-mono font-semibold" style={{ fontSize: '0.88rem' }}>
-                      {product.id}
-                    </td>
+                  return (
+                    <tr
+                      key={product.id}
+                      style={{
+                        borderBottom: '1px solid var(--border-color)',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                    >
+                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.825rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                        #{product.id}
+                      </td>
 
-                    {/* 2. Product Name */}
-                    <td className="p-4">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <img
-                          src={getAssetUrl(product.imageUrl)}
-                          alt={product.name}
-                          style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border-color)' }}
-                        />
-                        <div>
-                          <div className="font-semibold" style={{ fontSize: '0.9rem' }}>{product.name}</div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            Rs. {Number(product.price || 0).toLocaleString()}
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+                          <div
+                            style={{
+                              width: 46,
+                              height: 46,
+                              borderRadius: 8,
+                              overflow: 'hidden',
+                              backgroundColor: '#1E2225',
+                              border: '1px solid rgba(214, 180, 106, 0.25)',
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <img
+                              src={getAssetUrl(product.imageUrl)}
+                              alt={product.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.parentElement.innerHTML = '💎';
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                              {product.name}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                              PKR {Number(product.price || 0).toLocaleString()}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 3. Product Status (Active / Inactive) */}
-                    <td className="p-4">
-                      <span
-                        style={{
-                          padding: '0.2rem 0.55rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          backgroundColor: product.isActive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                          color: product.isActive ? 'var(--success-color)' : 'var(--error-color)',
-                        }}
-                      >
-                        {product.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-
-                    {/* 4. Post Status */}
-                    <td className="p-4">
-                      <PostStatusBadge
-                        status={product.post_status}
-                        latestApprovalStatus={product.latestApprovalStatus}
-                      />
-                    </td>
-
-                    {/* 5. Action (Post Button) */}
-                    <td className="p-4">
-                      {showButton ? (
-                        <button
-                          onClick={() => handlePostClick(product)}
-                          disabled={isTriggering || triggeringId !== null}
-                          className="btn"
-                          title={normalizeStatus(product.latestApprovalStatus) === 'rejected' ? 'Re-trigger post generation' : 'Generate Instagram Post'}
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <span
                           style={{
-                            padding: '0.45rem 1rem',
-                            fontSize: '0.82rem',
+                            padding: '0.25rem 0.65rem',
+                            borderRadius: 20,
+                            fontSize: '0.75rem',
                             fontWeight: 600,
-                            borderRadius: '6px',
-                            background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
-                            color: '#fff',
-                            border: 'none',
-                            cursor: isTriggering || triggeringId ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.45rem',
-                            boxShadow: '0 2px 6px rgba(220, 39, 67, 0.3)',
-                            transition: 'opacity 0.2s',
-                            opacity: isTriggering || triggeringId ? 0.6 : 1,
+                            backgroundColor: product.isActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            color: product.isActive ? '#10B981' : '#EF4444',
+                            border: product.isActive ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(239, 68, 68, 0.25)',
                           }}
                         >
-                          {isTriggering ? (
-                            <>
-                              <span className="loader" style={{ width: 14, height: 14, borderWidth: 2, borderColor: '#fff', borderTopColor: 'transparent' }} />
-                              Triggering...
-                            </>
-                          ) : (
-                            <>
-                              <span>📸</span> Post
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                          —
+                          {product.isActive ? 'Active' : 'Inactive'}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                      </td>
 
-        {!loading && filteredProducts.length === 0 && (
-          <div className="p-8 text-center text-text-secondary" style={{ padding: '3rem' }}>
-            No products found matching the criteria.
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <PostStatusBadge
+                          status={product.post_status}
+                          latestApprovalStatus={product.latestApprovalStatus}
+                        />
+                      </td>
+
+                      <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                        {showButton ? (
+                          <button
+                            onClick={() => handlePostClick(product)}
+                            disabled={isTriggering || triggeringId !== null}
+                            className="btn"
+                            title={
+                              normalizeStatus(product.latestApprovalStatus) === 'rejected'
+                                ? 'Re-trigger Instagram post generation via n8n'
+                                : 'Generate & Publish Instagram Post via n8n'
+                            }
+                            style={{
+                              padding: '0.45rem 1.1rem',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              borderRadius: 8,
+                              background: 'linear-gradient(135deg, #E1306C 0%, #C13584 50%, #833AB4 100%)',
+                              color: '#fff',
+                              border: 'none',
+                              cursor: isTriggering || triggeringId ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.45rem',
+                              boxShadow: '0 4px 14px rgba(225, 48, 108, 0.35)',
+                              transition: 'all 0.2s ease',
+                              opacity: isTriggering || triggeringId ? 0.6 : 1,
+                            }}
+                          >
+                            {isTriggering ? (
+                              <>
+                                <span
+                                  className="loader"
+                                  style={{
+                                    width: 14,
+                                    height: 14,
+                                    borderWidth: 2,
+                                    borderColor: '#fff',
+                                    borderTopColor: 'transparent',
+                                  }}
+                                />
+                                <span>Triggering n8n...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>📸</span>
+                                <span>{normalizeStatus(product.latestApprovalStatus) === 'rejected' ? 'Retry Post' : 'Post'}</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                            —
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
