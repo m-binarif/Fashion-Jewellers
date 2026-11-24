@@ -11,6 +11,7 @@ import EmployeeDashboardView from './portals/employee/EmployeeDashboardView';
 import SocialProducts from './portals/employee/SocialProducts';
 import SocialPostConfirmation from './portals/employee/SocialPostConfirmation';
 import SalesReport from './portals/common/SalesReport';
+import CompetitorAnalysis from './portals/common/CompetitorAnalysis';
 import { useEmployeeAuth } from './context/EmployeeAuthContext';
 import ScrollToTop from './components/common/ScrollToTop';
 
@@ -34,6 +35,7 @@ import AdminEmployees from './portals/admin/AdminEmployees';
 
 // Employee pages
 import EmployeeLogin from './portals/employee/EmployeeLogin';
+import EmployeeCustomers from './portals/employee/EmployeeCustomers';
 
 // Component to render appropriate products view based on employee role
 const EmployeeProductsRoute = () => {
@@ -72,6 +74,8 @@ function App() {
                     <Route path="products" element={<AdminProducts />} />
                     <Route path="products-posting" element={<SocialProducts />} />
                     <Route path="post-confirmation" element={<SocialPostConfirmation />} />
+                    <Route path="competitor-trends" element={<CompetitorAnalysis />} />
+                    <Route path="competitors" element={<Navigate to="/admin/competitor-trends" replace />} />
                     <Route path="social-products" element={<Navigate to="/admin/products-posting" replace />} />
                     <Route path="sales-report" element={<SalesReport />} />
                     <Route path="orders" element={<AdminOrders />} />
@@ -86,9 +90,12 @@ function App() {
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<EmployeeDashboardView />} />
                     <Route path="products" element={<EmployeeProductsRoute />} />
+                    <Route path="competitor-trends" element={<CompetitorAnalysis />} />
+                    <Route path="competitors" element={<Navigate to="competitor-trends" replace />} />
                     <Route path="sales-report" element={<SalesReport />} />
                     <Route path="post-confirmation" element={<SocialPostConfirmation />} />
                     <Route path="orders" element={<AdminOrders />} />
+                    <Route path="customers" element={<EmployeeCustomers />} />
                     <Route path="suppliers" element={<AdminSuppliers />} />
                   </Route>
 
