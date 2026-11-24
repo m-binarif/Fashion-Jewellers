@@ -10,9 +10,9 @@ import { useEmployeeAuth } from '../../context/EmployeeAuthContext';
 
 // Permitted navigation items for each employee role
 const ROLE_NAV_PERMISSIONS = {
-  'Inventory Manager':    ['products', 'sales-report', 'suppliers'],
-  'Sales Executive':      ['orders'],
-  'Social Media Manager': ['products', 'post-confirmation'],
+  'Inventory Manager':    ['products', 'sales-report', 'suppliers', 'competitor-trends'],
+  'Sales Executive':      ['orders', 'customers'],
+  'Social Media Manager': ['products', 'post-confirmation', 'competitor-trends'],
 };
 
 const EmployeeDashboardLayout = () => {
@@ -80,6 +80,12 @@ const EmployeeDashboardLayout = () => {
       icon: '📱',
     },
     {
+      key: 'competitor-trends',
+      path: `/employee/${username}/competitor-trends`,
+      label: 'Competitor Analysis',
+      icon: '🔍',
+    },
+    {
       key: 'orders',
       path: `/employee/${username}/orders`,
       label: 'Order Management',
@@ -90,6 +96,12 @@ const EmployeeDashboardLayout = () => {
       path: `/employee/${username}/suppliers`,
       label: 'Supplier Data',
       icon: '🏭',
+    },
+    {
+      key: 'customers',
+      path: `/employee/${username}/customers`,
+      label: 'Customers',
+      icon: '👥',
     },
   ];
 

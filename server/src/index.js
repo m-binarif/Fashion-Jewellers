@@ -39,6 +39,8 @@ app.use('/api/v1/admin/social', require('./routes/social'));
 app.use('/api/social-media', require('./routes/social'));
 app.use('/api/v1/sales-report', require('./routes/salesReport'));
 app.use('/api/v1/admin/sales-report', require('./routes/salesReport'));
+app.use('/api/competitors', require('./routes/competitors'));
+app.use('/api/v1/competitors', require('./routes/competitors'));
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -49,6 +51,7 @@ app.use((err, req, res, next) => {
 
 const { initSocialTable } = require('./db/initSocialTable');
 const { initProductSchema } = require('./db/initProductSchema');
+const { initCompetitorTables } = require('./db/initCompetitorTables');
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
@@ -57,6 +60,7 @@ app.listen(PORT, async () => {
     console.log(`PostgreSQL connected — DB time: ${result.rows[0]?.now}`);
     await initSocialTable();
     await initProductSchema();
+    await initCompetitorTables();
   } catch (err) {
     console.error('PostgreSQL connection FAILED:', err.message);
   }

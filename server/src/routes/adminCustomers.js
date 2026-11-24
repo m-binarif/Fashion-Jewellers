@@ -1,12 +1,12 @@
 const express = require('express');
 const { CustomerService } = require('../services/customerService');
-const { authMiddleware, roleMiddleware } = require('../middleware/auth');
+const { authMiddleware, employeeRoleMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Only logged-in admin users can access these customer management routes
+// Admin and Sales Executive employees can access customer management routes
 router.use(authMiddleware);
-router.use(roleMiddleware('admin'));
+router.use(employeeRoleMiddleware('Sales Executive'));
 
 // GET /api/v1/admin/customers
 // Fetch all customers with pagination and search filtering

@@ -8,7 +8,8 @@
     "dev": "nodemon src/index.js",
     "test": "node test/cloudinary_integration.test.js && node test/n8n_webhook_integration.test.js && node test/sales_report_integration.test.js",
     "migrate:cleanup": "node src/scripts/runMigration.js",
-    "migrate:images": "node src/scripts/migrateImagesToCloudinary.js"
+    "migrate:images": "node src/scripts/migrateImagesToCloudinary.js",
+    "migrate:competitors": "node src/scripts/runCompetitorMigration.js"
   },
   "dependencies": {
     "bcrypt": "6.0.0",
